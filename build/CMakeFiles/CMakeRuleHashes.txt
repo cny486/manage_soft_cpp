@@ -1,0 +1,7 @@
+# Hashes of file build rules.
+d64621b4285af5ca1d73ada221875617 src/client/CMakeFiles/ManageSoftCpp_autogen
+a485c9d93220d236229e55051bc9311d src/client/ManageSoftCpp_autogen/timestamp
+65fb27f89608a1076b2c0d58401c9449 src/server/CMakeFiles/ManageSoftServer_autogen
+6386e5113fb203eafc4c28be2faa3d3e src/server/ManageSoftServer_autogen/timestamp
+08f92ead56de8cf1f7cf6df0687aa944 src/shared/CMakeFiles/ManageSoftShared_autogen
+2d02df55f190e0475cc8a639a9acc4bd src/shared/ManageSoftShared_autogen/timestamp

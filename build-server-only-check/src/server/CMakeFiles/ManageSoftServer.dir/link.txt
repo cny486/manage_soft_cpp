@@ -1,0 +1,3 @@
+D:\work\manage_soft_cpp\.venv\Lib\site-packages\cmake\data\bin\cmake.exe -E rm -f CMakeFiles\ManageSoftServer.dir/objects.a
+D:\Qt\Tools\mingw810_64\bin\ar.exe qc CMakeFiles\ManageSoftServer.dir/objects.a @CMakeFiles\ManageSoftServer.dir\objects1.rsp
+D:\Qt\Tools\mingw810_64\bin\g++.exe -O3 -DNDEBUG -Wl,--whole-archive CMakeFiles\ManageSoftServer.dir/objects.a -Wl,--no-whole-archive -o ManageSoftServer.exe -Wl,--out-implib,libManageSoftServer.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\ManageSoftServer.dir\linkLibs.rsp

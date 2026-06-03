@@ -1,0 +1,12 @@
+D:/work/manage_soft_cpp/build-server-only-check/CMakeFiles/edit_cache.dir
+D:/work/manage_soft_cpp/build-server-only-check/CMakeFiles/rebuild_cache.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/shared/CMakeFiles/ManageSoftShared.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/shared/CMakeFiles/edit_cache.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/shared/CMakeFiles/rebuild_cache.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/shared/CMakeFiles/ManageSoftShared_autogen_timestamp_deps.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/shared/CMakeFiles/ManageSoftShared_autogen.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/server/CMakeFiles/ManageSoftServer.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/server/CMakeFiles/edit_cache.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/server/CMakeFiles/rebuild_cache.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/server/CMakeFiles/ManageSoftServer_autogen_timestamp_deps.dir
+D:/work/manage_soft_cpp/build-server-only-check/src/server/CMakeFiles/ManageSoftServer_autogen.dir

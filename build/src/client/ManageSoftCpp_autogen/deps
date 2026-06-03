@@ -1,0 +1,34 @@
+ManageSoftCpp_autogen/timestamp: \
+	D:/work/manage_soft_cpp/src/client/CMakeLists.txt \
+	D:/work/manage_soft_cpp/src/client/accountsecuritydialog.cpp \
+	D:/work/manage_soft_cpp/src/client/accountsecuritydialog.h \
+	D:/work/manage_soft_cpp/src/client/connectionsettings.cpp \
+	D:/work/manage_soft_cpp/src/client/connectionsettings.h \
+	D:/work/manage_soft_cpp/src/client/connectionsettingsdialog.cpp \
+	D:/work/manage_soft_cpp/src/client/connectionsettingsdialog.h \
+	D:/work/manage_soft_cpp/src/client/inventoryfulfillmentdialog.cpp \
+	D:/work/manage_soft_cpp/src/client/inventoryfulfillmentdialog.h \
+	D:/work/manage_soft_cpp/src/client/inventoryhistorydialog.cpp \
+	D:/work/manage_soft_cpp/src/client/inventoryhistorydialog.h \
+	D:/work/manage_soft_cpp/src/client/inventoryitempickerdialog.cpp \
+	D:/work/manage_soft_cpp/src/client/inventoryitempickerdialog.h \
+	D:/work/manage_soft_cpp/src/client/inventoryrecorddialog.cpp \
+	D:/work/manage_soft_cpp/src/client/inventoryrecorddialog.h \
+	D:/work/manage_soft_cpp/src/client/inventorytransactiondialog.cpp \
+	D:/work/manage_soft_cpp/src/client/inventorytransactiondialog.h \
+	D:/work/manage_soft_cpp/src/client/logindialog.cpp \
+	D:/work/manage_soft_cpp/src/client/logindialog.h \
+	D:/work/manage_soft_cpp/src/client/main.cpp \
+	D:/work/manage_soft_cpp/src/client/mainwindow.cpp \
+	D:/work/manage_soft_cpp/src/client/mainwindow.h \
+	D:/work/manage_soft_cpp/src/client/managementpage.cpp \
+	D:/work/manage_soft_cpp/src/client/managementpage.h \
+	D:/work/manage_soft_cpp/src/client/manualstockindialog.cpp \
+	D:/work/manage_soft_cpp/src/client/manualstockindialog.h \
+	D:/work/manage_soft_cpp/src/client/recorddialog.cpp \
+	D:/work/manage_soft_cpp/src/client/recorddialog.h \
+	D:/work/manage_soft_cpp/src/client/reimbursementoverviewpage.cpp \
+	D:/work/manage_soft_cpp/src/client/reimbursementoverviewpage.h \
+	D:/work/manage_soft_cpp/src/client/tcpappserviceclient.cpp \
+	D:/work/manage_soft_cpp/src/client/tcpappserviceclient.h \
+	D:/work/manage_soft_cpp/.venv/Lib/site-packages/cmake/data/bin/cmake.exe

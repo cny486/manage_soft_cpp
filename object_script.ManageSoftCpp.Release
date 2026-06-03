@@ -1,0 +1,11 @@
+release/main.o
+release/inventoryhistorydialog.o
+release/inventoryfulfillmentdialog.o
+release/inventoryitempickerdialog.o
+release/inventorytransactiondialog.o
+release/jsonstorageservice.o
+release/manualstockindialog.o
+release/simplexlsxdocument.o
+release/recorddialog.o
+release/managementpage.o
+release/mainwindow.o

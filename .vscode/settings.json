@@ -1,0 +1,11 @@
+{
+    "cmake.cmakePath": "D:/work/manage_soft_cpp/.venv/Lib/site-packages/cmake/data/bin/cmake.exe",
+    "cmake.generator": "MinGW Makefiles",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.configureSettings": {
+        "CMAKE_PREFIX_PATH": "D:/Qt/5.15.2/mingw81_64",
+        "CMAKE_C_COMPILER": "D:/Qt/Tools/mingw810_64/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "D:/Qt/Tools/mingw810_64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "D:/App_Data/MINgw-64/mingw64/bin/mingw32-make.exe"
+    }
+}

@@ -1,0 +1,3 @@
+# Hashes of file build rules.
+671250d0a82f65d27e9a451536eb1b88 CMakeFiles/ManageSoftCpp_autogen
+5a4a710d96574e15f70f0017bba58261 ManageSoftCpp_autogen/timestamp

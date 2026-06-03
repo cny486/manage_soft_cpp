@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/work/manage_soft_cpp/build/cmake_install.cmake",
+		"D:/work/manage_soft_cpp/build/src/shared/cmake_install.cmake",
+		"D:/work/manage_soft_cpp/build/src/client/cmake_install.cmake",
+		"D:/work/manage_soft_cpp/build/src/server/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

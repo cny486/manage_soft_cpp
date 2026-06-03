@@ -1,0 +1,21 @@
+ManageSoftShared_autogen/timestamp: \
+	D:/work/manage_soft_cpp/src/shared/CMakeLists.txt \
+	D:/work/manage_soft_cpp/src/shared/aiapisettings.cpp \
+	D:/work/manage_soft_cpp/src/shared/aiapisettings.h \
+	D:/work/manage_soft_cpp/src/shared/aiinventoryenricher.cpp \
+	D:/work/manage_soft_cpp/src/shared/aiinventoryenricher.h \
+	D:/work/manage_soft_cpp/src/shared/appschema.h \
+	D:/work/manage_soft_cpp/src/shared/appservice.h \
+	D:/work/manage_soft_cpp/src/shared/datainitializer.cpp \
+	D:/work/manage_soft_cpp/src/shared/datainitializer.h \
+	D:/work/manage_soft_cpp/src/shared/emailsettings.cpp \
+	D:/work/manage_soft_cpp/src/shared/emailsettings.h \
+	D:/work/manage_soft_cpp/src/shared/jsonstorageservice.cpp \
+	D:/work/manage_soft_cpp/src/shared/jsonstorageservice.h \
+	D:/work/manage_soft_cpp/src/shared/simplexlsxdocument.cpp \
+	D:/work/manage_soft_cpp/src/shared/simplexlsxdocument.h \
+	D:/work/manage_soft_cpp/src/shared/smtpemailclient.cpp \
+	D:/work/manage_soft_cpp/src/shared/smtpemailclient.h \
+	D:/work/manage_soft_cpp/src/shared/tcpmessagecodec.cpp \
+	D:/work/manage_soft_cpp/src/shared/tcpmessagecodec.h \
+	D:/work/manage_soft_cpp/.venv/Lib/site-packages/cmake/data/bin/cmake.exe

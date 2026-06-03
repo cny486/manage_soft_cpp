@@ -1,0 +1,82 @@
+{
+	"AUTOGEN_COMMAND_LINE_LENGTH_MAX" : 32000,
+	"BUILD_DIR" : "D:/work/manage_soft_cpp/build-server-only-check/src/server/ManageSoftServer_autogen",
+	"CMAKE_BINARY_DIR" : "D:/work/manage_soft_cpp/build-server-only-check",
+	"CMAKE_CURRENT_BINARY_DIR" : "D:/work/manage_soft_cpp/build-server-only-check/src/server",
+	"CMAKE_CURRENT_SOURCE_DIR" : "D:/work/manage_soft_cpp/src/server",
+	"CMAKE_EXECUTABLE" : "D:/work/manage_soft_cpp/.venv/Lib/site-packages/cmake/data/bin/cmake.exe",
+	"CMAKE_LIST_FILES" : [ "D:/work/manage_soft_cpp/src/server/CMakeLists.txt" ],
+	"CMAKE_SOURCE_DIR" : "D:/work/manage_soft_cpp",
+	"CROSS_CONFIG" : false,
+	"DEP_FILE" : "D:/work/manage_soft_cpp/build-server-only-check/src/server/ManageSoftServer_autogen/deps",
+	"DEP_FILE_RULE_NAME" : "ManageSoftServer_autogen/timestamp",
+	"HEADERS" : 
+	[
+		[
+			"D:/work/manage_soft_cpp/src/server/tcpbackendserver.h",
+			"MU",
+			"EWIEGA46WW/moc_tcpbackendserver.cpp",
+			null
+		]
+	],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "D:/work/manage_soft_cpp/build-server-only-check/src/server/ManageSoftServer_autogen/include",
+	"MOC_COMPILATION_FILE" : "D:/work/manage_soft_cpp/build-server-only-check/src/server/ManageSoftServer_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : [ "QT_CORE_LIB", "QT_NETWORK_LIB", "QT_NO_DEBUG" ],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"D:/work/manage_soft_cpp/src/server",
+		"D:/work/manage_soft_cpp/src/shared",
+		"D:/Qt/5.15.2/mingw81_64/include",
+		"D:/Qt/5.15.2/mingw81_64/include/QtCore",
+		"D:/Qt/5.15.2/mingw81_64/mkspecs/win32-g++",
+		"D:/Qt/5.15.2/mingw81_64/include/QtNetwork",
+		"D:/Qt/Tools/mingw810_64/x86_64-w64-mingw32/include",
+		"D:/Qt/Tools/mingw810_64/lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++",
+		"D:/Qt/Tools/mingw810_64/lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++/x86_64-w64-mingw32",
+		"D:/Qt/Tools/mingw810_64/lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++/backward",
+		"D:/Qt/Tools/mingw810_64/lib/gcc/x86_64-w64-mingw32/8.1.0/include",
+		"D:/Qt/Tools/mingw810_64/lib/gcc/x86_64-w64-mingw32/8.1.0/include-fixed"
+	],
+	"MOC_MACRO_NAMES" : [ "Q_OBJECT", "Q_GADGET", "Q_NAMESPACE", "Q_NAMESPACE_EXPORT" ],
+	"MOC_OPTIONS" : [],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : 
+	[
+		"D:/Qt/Tools/mingw810_64/bin/g++.exe",
+		"-std=gnu++17",
+		"-w",
+		"-dM",
+		"-E",
+		"D:/work/manage_soft_cpp/.venv/Lib/site-packages/cmake/data/share/cmake-4.3/Modules/CMakeCXXCompilerABI.cpp"
+	],
+	"MOC_PREDEFS_FILE" : "D:/work/manage_soft_cpp/build-server-only-check/src/server/ManageSoftServer_autogen/moc_predefs.h",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : [],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 8,
+	"PARSE_CACHE_FILE" : "D:/work/manage_soft_cpp/build-server-only-check/src/server/CMakeFiles/ManageSoftServer_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "D:/Qt/5.15.2/mingw81_64/bin/moc.exe",
+	"QT_UIC_EXECUTABLE" : "",
+	"QT_VERSION_MAJOR" : 5,
+	"QT_VERSION_MINOR" : 15,
+	"SETTINGS_FILE" : "D:/work/manage_soft_cpp/build-server-only-check/src/server/CMakeFiles/ManageSoftServer_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[ "D:/work/manage_soft_cpp/src/server/server_main.cpp", "MU", null ],
+		[ "D:/work/manage_soft_cpp/src/server/tcpbackendserver.cpp", "MU", null ]
+	],
+	"UIC_OPTIONS" : [],
+	"UIC_SEARCH_PATHS" : [],
+	"UIC_SKIP" : [],
+	"UIC_UI_FILES" : [],
+	"USE_BETTER_GRAPH" : false,
+	"VERBOSITY" : 0
+}
