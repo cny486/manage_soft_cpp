@@ -30,6 +30,9 @@ set(MANAGE_SOFT_CLIENT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/mainwindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tcpappserviceclient.h
     ${CMAKE_CURRENT_SOURCE_DIR}/tcpappserviceclient.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/NoWheelSpinBox.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/NoWheelDoubleSpinBox.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/NoWheelDateEdit.h
 )
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)

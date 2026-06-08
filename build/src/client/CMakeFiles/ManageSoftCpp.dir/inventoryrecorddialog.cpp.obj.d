@@ -295,15 +295,29 @@ src/client/CMakeFiles/ManageSoftCpp.dir/inventoryrecorddialog.cpp.obj: \
  D:/Qt/5.15.2/mingw81_64/include/QtGui/qkeysequence.h \
  D:/Qt/5.15.2/mingw81_64/include/QtCore/QHash \
  D:/Qt/5.15.2/mingw81_64/include/QtCore/qhash.h \
+ D:\work\manage_soft_cpp\src\client\NoWheelSpinBox.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QSpinBox \
+ D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qspinbox.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qabstractspinbox.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtGui/qvalidator.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtCore/qregularexpression.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtCore/qvariant.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtCore/qlocale.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtGui/QWheelEvent \
+ D:/Qt/5.15.2/mingw81_64/include/QtGui/qevent.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtCore/qcoreevent.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtCore/qset.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtCore/qurl.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtCore/qfile.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtCore/qfiledevice.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtGui/qvector2d.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtGui/qtouchdevice.h \
+ D:\work\manage_soft_cpp\src\client\NoWheelDoubleSpinBox.h \
+ D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QDoubleSpinBox \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QComboBox \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qcombobox.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qabstractitemdelegate.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qstyleoption.h \
- D:/Qt/5.15.2/mingw81_64/include/QtCore/qlocale.h \
- D:/Qt/5.15.2/mingw81_64/include/QtCore/qvariant.h \
- D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qabstractspinbox.h \
- D:/Qt/5.15.2/mingw81_64/include/QtGui/qvalidator.h \
- D:/Qt/5.15.2/mingw81_64/include/QtCore/qregularexpression.h \
  D:/Qt/5.15.2/mingw81_64/include/QtGui/qicon.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qslider.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qabstractslider.h \
@@ -321,8 +335,6 @@ src/client/CMakeFiles/ManageSoftCpp.dir/inventoryrecorddialog.cpp.obj: \
  D:/Qt/5.15.2/mingw81_64/include/QtCore/qcalendar.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QDialogButtonBox \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qdialogbuttonbox.h \
- D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QDoubleSpinBox \
- D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qspinbox.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QFormLayout \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qformlayout.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QLayout \
@@ -353,12 +365,10 @@ src/client/CMakeFiles/ManageSoftCpp.dir/inventoryrecorddialog.cpp.obj: \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QScrollArea \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qscrollarea.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qabstractscrollarea.h \
- D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QSpinBox \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QTextBrowser \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qtextbrowser.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qtextedit.h \
  D:/Qt/5.15.2/mingw81_64/include/QtGui/qtextdocument.h \
- D:/Qt/5.15.2/mingw81_64/include/QtCore/qurl.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QTextEdit \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/qtextedit.h \
  D:/Qt/5.15.2/mingw81_64/include/QtWidgets/QVBoxLayout

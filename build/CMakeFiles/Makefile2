@@ -152,8 +152,8 @@ src/shared/clean: src/shared/CMakeFiles/ManageSoftShared_autogen.dir/clean
 # Target rules for target src/shared/CMakeFiles/ManageSoftShared.dir
 
 # All Build rule for target.
-src/shared/CMakeFiles/ManageSoftShared.dir/all: src/shared/CMakeFiles/ManageSoftShared_autogen_timestamp_deps.dir/all
 src/shared/CMakeFiles/ManageSoftShared.dir/all: src/shared/CMakeFiles/ManageSoftShared_autogen.dir/all
+src/shared/CMakeFiles/ManageSoftShared.dir/all: src/shared/CMakeFiles/ManageSoftShared_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f src\shared\CMakeFiles\ManageSoftShared.dir\build.make src/shared/CMakeFiles/ManageSoftShared.dir/depend
 	$(MAKE) $(MAKESILENT) -f src\shared\CMakeFiles\ManageSoftShared.dir\build.make src/shared/CMakeFiles/ManageSoftShared.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=D:\work\manage_soft_cpp\build\CMakeFiles --progress-num=27,28,29,30,31,32,33,34,35,36,37 "Built target ManageSoftShared"

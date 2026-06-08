@@ -1,10 +1,12 @@
 #include "inventoryrecorddialog.h"
 
+#include "NoWheelSpinBox.h"
+#include "NoWheelDoubleSpinBox.h"
+
 #include <QComboBox>
 #include <QDate>
 #include <QDateEdit>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -13,7 +15,6 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QSpinBox>
 #include <QTextBrowser>
 #include <QTextEdit>
 #include <QVBoxLayout>
@@ -184,12 +185,12 @@ QWidget *InventoryRecordDialog::createEditor(const FieldDefinition &field)
 {
     switch (field.type) {
     case FieldType::Integer: {
-        auto *editor = new QSpinBox(this);
+        auto *editor = new NoWheelSpinBox(this);
         editor->setRange(0, 1000000000);
         return editor;
     }
     case FieldType::Double: {
-        auto *editor = new QDoubleSpinBox(this);
+        auto *editor = new NoWheelDoubleSpinBox(this);
         editor->setRange(-1000000000.0, 1000000000.0);
         editor->setDecimals(2);
         return editor;
@@ -405,3 +406,4 @@ QString InventoryRecordDialog::fieldLabel(const QString &fieldKey) const
     }
     return fieldKey;
 }
+

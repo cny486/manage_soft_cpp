@@ -13,6 +13,24 @@
 	"HEADERS" : 
 	[
 		[
+			"D:/work/manage_soft_cpp/src/client/NoWheelDateEdit.h",
+			"MU",
+			"EWIEGA46WW/moc_NoWheelDateEdit.cpp",
+			null
+		],
+		[
+			"D:/work/manage_soft_cpp/src/client/NoWheelDoubleSpinBox.h",
+			"MU",
+			"EWIEGA46WW/moc_NoWheelDoubleSpinBox.cpp",
+			null
+		],
+		[
+			"D:/work/manage_soft_cpp/src/client/NoWheelSpinBox.h",
+			"MU",
+			"EWIEGA46WW/moc_NoWheelSpinBox.cpp",
+			null
+		],
+		[
 			"D:/work/manage_soft_cpp/src/client/accountsecuritydialog.h",
 			"MU",
 			"EWIEGA46WW/moc_accountsecuritydialog.cpp",
