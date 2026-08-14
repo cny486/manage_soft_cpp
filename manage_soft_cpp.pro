@@ -16,6 +16,8 @@ SOURCES += \
     src/client/accountsecuritydialog.cpp \
     src/client/connectionsettings.cpp \
     src/client/connectionsettingsdialog.cpp \
+    src/client/demandlibraryoverviewpage.cpp \
+    src/client/demandlibrarydetailpage.cpp \
     src/shared/datainitializer.cpp \
     src/shared/emailsettings.cpp \
     src/client/inventoryhistorydialog.cpp \
@@ -41,6 +43,8 @@ HEADERS += \
     src/client/accountsecuritydialog.h \
     src/client/connectionsettings.h \
     src/client/connectionsettingsdialog.h \
+    src/client/demandlibraryoverviewpage.h \
+    src/client/demandlibrarydetailpage.h \
     src/shared/datainitializer.h \
     src/shared/emailsettings.h \
     src/client/inventoryhistorydialog.h \
