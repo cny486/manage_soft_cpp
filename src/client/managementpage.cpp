@@ -6,6 +6,8 @@
 #include "manualstockindialog.h"
 #include "inventoryitempickerdialog.h"
 #include "inventoryrecorddialog.h"
+#include "inventorysearchutils.h"
+#include "searchhighlightdelegate.h"
 #include "inventorytransactiondialog.h"
 
 #include "recorddialog.h"
@@ -226,19 +228,38 @@ void setButtonVariant(QPushButton *button, const QString &variant)
 
 QList<FieldDefinition> stockEditDialogFields(const QList<FieldDefinition> &fields)
 {
-    return prioritizedFields(fields,
-                             {
-                                 QStringLiteral("manufacturerPart"),
-                                 QStringLiteral("quantity"),
-                                 QStringLiteral("location"),
-                                 QStringLiteral("date")
-                             },
-                             {
-                                 QStringLiteral("manufacturerPart"),
-                                 QStringLiteral("quantity"),
-                                 QStringLiteral("location"),
-                                 QStringLiteral("date")
-                             });
+    const QStringList editableKeys = {
+        QStringLiteral("manufacturerPart"),
+        QStringLiteral("quantity"),
+        QStringLiteral("category"),
+        QStringLiteral("value"),
+        QStringLiteral("footprint"),
+        QStringLiteral("voltage"),
+        QStringLiteral("supplier"),
+        QStringLiteral("date"),
+        QStringLiteral("location")
+    };
+
+    QList<FieldDefinition> filteredFields;
+    filteredFields.reserve(editableKeys.size());
+    for (const QString &key : editableKeys) {
+        for (const FieldDefinition &field : fields) {
+            if (field.key != key) {
+                continue;
+            }
+
+            FieldDefinition adjustedField = field;
+            if (key == QStringLiteral("manufacturerPart")
+                || key == QStringLiteral("quantity")) {
+                adjustedField.required = true;
+            }
+
+            filteredFields.append(adjustedField);
+            break;
+        }
+    }
+
+    return filteredFields;
 }
 
 QToolButton *createOverflowMenuButton(QMenu *menu, QWidget *parent)
@@ -823,6 +844,8 @@ void ManagementPage::buildUi()
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_table->verticalHeader()->setVisible(false);
+    m_highlightDelegate = new SearchHighlightDelegate(m_table);
+    m_table->setItemDelegate(m_highlightDelegate);
     if (isInventoryPage()) {
         m_table->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(m_table, &QTableWidget::customContextMenuRequested, this, [this](const QPoint &position) {
@@ -875,6 +898,11 @@ void ManagementPage::buildUi()
 void ManagementPage::refreshTable(const QList<QVariantMap> &records)
 {
     m_visibleRecords = records;
+    if (m_highlightDelegate != nullptr) {
+        m_highlightDelegate->setKeyword(isInventoryPage() && m_searchEdit != nullptr
+                                            ? m_searchEdit->text().trimmed()
+                                            : QString());
+    }
     m_table->setRowCount(records.size());
     const QList<FieldDefinition> visibleFields = listFields();
 
@@ -934,6 +962,7 @@ void ManagementPage::refreshTable(const QList<QVariantMap> &records)
                                .arg(records.size())
                                .arg(m_storageService->storageRoot()));
     m_statusLabel->setStyleSheet(QStringLiteral("color: #71888c; font-size: 12px; padding-top: 6px;"));
+    m_table->viewport()->update();
 }
 
 void ManagementPage::configureTableColumns()
@@ -986,7 +1015,7 @@ QList<QVariantMap> ManagementPage::filteredRecords(const QList<QVariantMap> &all
                                          ? QString()
                                          : m_reimbursedStatusFilterCombo->currentData().toString();
 
-    QList<QVariantMap> matches;
+    QList<QVariantMap> candidateMatches;
     for (const QVariantMap &record : allRecords) {
         if (!category.isEmpty()
             && record.value(QStringLiteral("category")).toString().trimmed() != category) {
@@ -1015,18 +1044,28 @@ QList<QVariantMap> ManagementPage::filteredRecords(const QList<QVariantMap> &all
         }
 
         if (keyword.isEmpty()) {
-            matches.append(record);
+            candidateMatches.append(record);
+            continue;
+        }
+
+        if (isInventoryPage()) {
+            candidateMatches.append(record);
             continue;
         }
 
         for (const QString &key : m_config.searchableKeys) {
             if (record.value(key).toString().contains(keyword, Qt::CaseInsensitive)) {
-                matches.append(record);
+                candidateMatches.append(record);
                 break;
             }
         }
     }
-    return matches;
+
+    if (keyword.isEmpty() || !isInventoryPage()) {
+        return candidateMatches;
+    }
+
+    return rankInventoryRecordsByKeyword(candidateMatches, keyword);
 }
 
 void ManagementPage::updateCategoryFilterOptions(const QList<QVariantMap> &allRecords)
@@ -1436,7 +1475,7 @@ void ManagementPage::editRecord()
     QVariantMap data;
     if (isInventoryPage()) {
         InventoryRecordDialog dialog(QStringLiteral("编辑%1").arg(m_config.title),
-                                     m_config.fields,
+                                     stockEditDialogFields(m_config.fields),
                                      m_storageService,
                                      {},
                                      this);

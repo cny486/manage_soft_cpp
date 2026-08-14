@@ -13,6 +13,7 @@ class QLineEdit;
 class QPushButton;
 class QComboBox;
 class QTableWidget;
+class SearchHighlightDelegate;
 
 class ManagementPage : public QWidget {
 public:
@@ -67,6 +68,7 @@ private:
     QComboBox *m_invoiceStatusFilterCombo = nullptr;
     QComboBox *m_reimbursedStatusFilterCombo = nullptr;
     QTableWidget *m_table = nullptr;
+    SearchHighlightDelegate *m_highlightDelegate = nullptr;
     QLabel *m_statusLabel = nullptr;
     QList<QVariantMap> m_visibleRecords;
 };

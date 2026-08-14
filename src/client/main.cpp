@@ -6,6 +6,7 @@
 
 #include "aiapisettings.h"
 #include "appservice.h"
+#include "clientupdatemanager.h"
 #include "connectionsettings.h"
 #include "connectionsettingsdialog.h"
 #include "datainitializer.h"
@@ -138,6 +139,18 @@ bool applyConnectionSettings(QWidget *parent,
     }
     return true;
 }
+
+ClientUpdateAction handleClientUpdateAfterLogin(QWidget *parent,
+                                                AppService *service)
+{
+    auto *tcpClient = dynamic_cast<TcpAppServiceClient *>(service);
+    if (tcpClient == nullptr) {
+        return ClientUpdateAction::Proceed;
+    }
+
+    QString updateError;
+    return ClientUpdateManager::handlePostLoginUpdateCheck(parent, tcpClient, &updateError);
+}
 }
 
 int main(int argc, char *argv[])
@@ -222,6 +235,12 @@ int main(int argc, char *argv[])
     if (startupLoginDialog.exec() != QDialog::Accepted) {
         return 0;
     }
+
+    const ClientUpdateAction startupUpdateAction = handleClientUpdateAfterLogin(nullptr, initialService.get());
+    if (startupUpdateAction != ClientUpdateAction::Proceed) {
+        return 0;
+    }
+
     statusMessage = statusMessageWithUser(statusMessage, initialService.get());
 
     std::function<void(QWidget *)> openConnectionSettings;
@@ -267,6 +286,12 @@ int main(int argc, char *argv[])
                                 },
                                 parent);
         if (loginDialog.exec() != QDialog::Accepted) {
+            return;
+        }
+
+        const ClientUpdateAction updateAction = handleClientUpdateAfterLogin(parent, replacementService.get());
+        if (updateAction != ClientUpdateAction::Proceed) {
+            qApp->quit();
             return;
         }
 

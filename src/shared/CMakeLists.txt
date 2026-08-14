@@ -1,4 +1,6 @@
 set(MANAGE_SOFT_SHARED_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/appversion.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/appversion.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/aiapisettings.h
     ${CMAKE_CURRENT_SOURCE_DIR}/aiapisettings.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/aiinventoryenricher.h
@@ -17,6 +19,8 @@ set(MANAGE_SOFT_SHARED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/smtpemailclient.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tcpmessagecodec.h
     ${CMAKE_CURRENT_SOURCE_DIR}/tcpmessagecodec.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/updateinfo.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/updateinfo.cpp
 )
 
 add_library(ManageSoftShared STATIC ${MANAGE_SOFT_SHARED_SOURCES})

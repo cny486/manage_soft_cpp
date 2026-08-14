@@ -2,6 +2,8 @@ set(MANAGE_SOFT_SERVER_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/server_main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tcpbackendserver.h
     ${CMAKE_CURRENT_SOURCE_DIR}/tcpbackendserver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/updatecatalogservice.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/updatecatalogservice.cpp
 )
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)

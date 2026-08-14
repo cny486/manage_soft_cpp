@@ -3,10 +3,13 @@
 #include "aiinventoryenricher.h"
 #include "jsonstorageservice.h"
 #include "tcpmessagecodec.h"
+#include "updatecatalogservice.h"
+#include "updateinfo.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointer>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QTcpServer>
@@ -94,24 +97,41 @@ bool TcpBackendServer::listen(const QHostAddress &address, quint16 port, QString
 void TcpBackendServer::handleNewConnection()
 {
     while (QTcpSocket *socket = m_server->nextPendingConnection()) {
-        connect(socket, &QTcpSocket::readyRead, this, [this, socket]() { handleSocketReadyRead(socket); });
+        const QPointer<QTcpSocket> guardedSocket(socket);
+        connect(socket, &QTcpSocket::readyRead, socket, [this, guardedSocket]() {
+            if (guardedSocket) {
+                handleSocketReadyRead(guardedSocket.data());
+            }
+        });
         connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
     }
 }
 
 void TcpBackendServer::handleSocketReadyRead(QTcpSocket *socket)
 {
+    if (socket == nullptr) {
+        return;
+    }
+
     QByteArray buffer = socket->property("buffer").toByteArray();
     buffer.append(socket->readAll());
 
     QJsonObject request;
     while (TcpMessageCodec::tryTakeMessage(&buffer, &request)) {
         const QJsonObject response = processRequest(request);
+        if (socket->state() != QAbstractSocket::ConnectedState) {
+            break;
+        }
         socket->write(TcpMessageCodec::encodeMessage(response));
         socket->flush();
+        if (socket->state() != QAbstractSocket::ConnectedState) {
+            break;
+        }
     }
 
-    socket->setProperty("buffer", buffer);
+    if (socket->state() == QAbstractSocket::ConnectedState) {
+        socket->setProperty("buffer", buffer);
+    }
 }
 
 QJsonObject TcpBackendServer::processRequest(const QJsonObject &request) const
@@ -312,6 +332,101 @@ QJsonObject TcpBackendServer::processRequest(const QJsonObject &request) const
                             success ? QStringLiteral("AI 连接测试成功。") : message);
     }
 
+    if (action == QStringLiteral("client.update.check")) {
+        UpdateCatalogService updateCatalog;
+        ClientUpdateInfo info;
+        QString message;
+        const bool success = updateCatalog.checkForUpdate(payload.value(QStringLiteral("appVersion")).toString(),
+                                                          &info,
+                                                          &message);
+        return makeResponse(requestId, success, success ? clientUpdateInfoToJson(info) : QJsonObject{}, message);
+    }
+
+    if (action == QStringLiteral("client.update.download")) {
+        UpdateCatalogService updateCatalog;
+        QByteArray content;
+        QString fileName;
+        QString sha256;
+        QString message;
+        const bool success = updateCatalog.loadUpdatePackage(payload.value(QStringLiteral("version")).toString(),
+                                                             &content,
+                                                             &fileName,
+                                                             &sha256,
+                                                             &message);
+        if (!success) {
+            return makeResponse(requestId, false, {}, message);
+        }
+
+        return makeResponse(requestId,
+                            true,
+                            {{QStringLiteral("fileName"), fileName},
+                             {QStringLiteral("sha256"), sha256},
+                             {QStringLiteral("fileContentBase64"), QString::fromLatin1(content.toBase64())}},
+                            message);
+    }
+
+    if (action == QStringLiteral("demand.list.import")) {
+        const QByteArray content = QByteArray::fromBase64(payload.value(QStringLiteral("fileContentBase64")).toString().toLatin1());
+        QString tempFilePath;
+        QString message;
+        if (!writeTempFile(QStringLiteral(".xlsx"), content, &tempFilePath, &message)) {
+            return makeResponse(requestId, false, {}, message);
+        }
+
+        const bool success = m_storage->importDemandList(payload.value(QStringLiteral("name")).toString(),
+                                                         tempFilePath,
+                                                         &message);
+        QFile::remove(tempFilePath);
+        return makeResponse(requestId, success, {}, message);
+    }
+
+    if (action == QStringLiteral("demand.list.items")) {
+        QList<DemandListItem> items;
+        QString message;
+        const bool success = m_storage->loadDemandListItems(payload.value(QStringLiteral("recordId")).toString(),
+                                                            &items,
+                                                            &message);
+        return makeResponse(requestId,
+                            success,
+                            {{QStringLiteral("items"), TcpMessageCodec::demandListItemsToJson(items)}},
+                            message);
+    }
+
+    if (action == QStringLiteral("demand.list.fulfillment.analyze")) {
+        QList<InventoryFulfillmentResult> results;
+        QString message;
+        const bool success = m_storage->analyzeDemandListFulfillment(payload.value(QStringLiteral("recordId")).toString(),
+                                                                     payload.value(QStringLiteral("buildCount")).toInt(),
+                                                                     &results,
+                                                                     &message);
+        return makeResponse(requestId,
+                            success,
+                            {{QStringLiteral("results"), TcpMessageCodec::fulfillmentResultsToJson(results)}},
+                            message);
+    }
+
+    if (action == QStringLiteral("demand.list.export")) {
+        const QString filePath = QDir::temp().filePath(QUuid::createUuid().toString(QUuid::WithoutBraces) + QStringLiteral(".xlsx"));
+        QString message;
+        const bool success = m_storage->exportDemandList(payload.value(QStringLiteral("recordId")).toString(),
+                                                         filePath,
+                                                         &message);
+        if (!success) {
+            return makeResponse(requestId, false, {}, message);
+        }
+
+        QByteArray content;
+        if (!readFileBytes(filePath, &content, &message)) {
+            QFile::remove(filePath);
+            return makeResponse(requestId, false, {}, message);
+        }
+        QFile::remove(filePath);
+        return makeResponse(requestId,
+                            true,
+                            {{QStringLiteral("fileContentBase64"), QString::fromLatin1(content.toBase64())}},
+                            message);
+    }
+
     if (action == QStringLiteral("page.importExcel")
         || action == QStringLiteral("inventory.importExcel")
         || action == QStringLiteral("inventory.importBom")
@@ -354,7 +469,11 @@ QJsonObject TcpBackendServer::processRequest(const QJsonObject &request) const
         }
 
         QList<InventoryFulfillmentResult> results;
-        const bool success = m_storage->analyzeInventoryFulfillment(tempFilePath, &results, &message);
+        const bool success = m_storage->analyzeInventoryFulfillment(
+            tempFilePath,
+            payload.value(QStringLiteral("fulfillmentSetCount")).toInt(1),
+            &results,
+            &message);
         QFile::remove(tempFilePath);
         return makeResponse(requestId,
                             success,
@@ -387,12 +506,21 @@ QJsonObject TcpBackendServer::processRequest(const QJsonObject &request) const
     }
 
     if (action == QStringLiteral("inventory.fulfillment.export")) {
-        const QString filePath = QDir::temp().filePath(QUuid::createUuid().toString(QUuid::WithoutBraces) + QStringLiteral(".xlsx"));
+        const QByteArray sourceContent = QByteArray::fromBase64(
+            payload.value(QStringLiteral("sourceFileContentBase64")).toString().toLatin1());
+        QString sourceTempFilePath;
         QString message;
+        if (!writeTempFile(QStringLiteral(".xlsx"), sourceContent, &sourceTempFilePath, &message)) {
+            return makeResponse(requestId, false, {}, message);
+        }
+
+        const QString filePath = QDir::temp().filePath(QUuid::createUuid().toString(QUuid::WithoutBraces) + QStringLiteral(".xlsx"));
         const bool success = m_storage->exportInventoryFulfillment(
             TcpMessageCodec::fulfillmentResultsFromJson(payload.value(QStringLiteral("results")).toArray()),
+            sourceTempFilePath,
             filePath,
             &message);
+        QFile::remove(sourceTempFilePath);
         if (!success) {
             return makeResponse(requestId, false, {}, message);
         }

@@ -182,7 +182,7 @@ void ManualStockInDialog::accept()
 
 void ManualStockInDialog::addExistingItem()
 {
-    InventoryItemPickerDialog picker(m_inventoryRecords, this);
+    InventoryItemPickerDialog picker(m_inventoryRecords, {}, this);
     if (picker.exec() != QDialog::Accepted) {
         return;
     }

@@ -10,7 +10,25 @@
 enum class InventoryFulfillmentStatus {
     Sufficient,
     Insufficient,
-    Missing
+    Missing,
+    PendingConfirmation
+};
+
+struct InventoryMatchCandidate {
+    QString itemId;
+    QString manufacturerPart;
+    QString manufacturer;
+    QString supplier;
+    QString name;
+    QString value;
+    QString footprint;
+    QString voltage;
+    QString uniqueId;
+    QString unit;
+    QString location;
+    int availableQuantity = 0;
+    int score = 0;
+    QStringList matchedFields;
 };
 
 struct InventoryFulfillmentResult {
@@ -23,8 +41,25 @@ struct InventoryFulfillmentResult {
     QString location;
     QString sourceFile;
     QList<int> sourceRows;
+    QString requestManufacturerPart;
+    QString requestName;
+    QString requestValue;
+    QString requestFootprint;
+    QString requestVoltage;
+    QString requestManufacturer;
+    QString requestSupplier;
+    QString requestDevice;
+    QString requestCategory;
+    QString requestDesignator;
+    QString requestComment;
+    QStringList sourceHeaders;
+    QStringList sourceRowValues;
     int requiredQuantity = 0;
     int availableQuantity = 0;
+    int matchScore = 0;
+    bool confirmed = false;
+    QStringList matchedFields;
+    QList<InventoryMatchCandidate> candidates;
     InventoryFulfillmentStatus status = InventoryFulfillmentStatus::Missing;
 };
 
@@ -39,6 +74,23 @@ struct InventoryEnrichmentResult {
     QString manufacturerPart;
     QString provider;
     QList<InventoryEnrichmentField> fields;
+};
+
+struct DemandListItem {
+    QString manufacturerPart;
+    QString name;
+    QString value;
+    QString footprint;
+    QString voltage;
+    QString manufacturer;
+    QString supplier;
+    QString device;
+    QString category;
+    QString designator;
+    QString comment;
+    QStringList originalRowValues;
+    int quantity = 0;
+    int sourceRow = 0;
 };
 
 struct ReimbursementAttachmentContent {
@@ -118,6 +170,7 @@ public:
                                                                         const QString &note = QString(),
                                     QString *errorMessage = nullptr) const = 0;
     virtual bool analyzeInventoryFulfillment(const QString &filePath,
+                                             int fulfillmentSetCount,
                                              QList<InventoryFulfillmentResult> *results,
                                              QString *errorMessage = nullptr) const = 0;
     virtual bool enrichInventoryRecord(const QString &manufacturerPart,
@@ -125,7 +178,21 @@ public:
                                        const QStringList &desiredFieldKeys,
                                        InventoryEnrichmentResult *result,
                                        QString *errorMessage = nullptr) const = 0;
+    virtual bool importDemandList(const QString &name,
+                                  const QString &filePath,
+                                  QString *errorMessage = nullptr) const = 0;
+    virtual bool exportDemandList(const QString &recordId,
+                                  const QString &filePath,
+                                  QString *errorMessage = nullptr) const = 0;
+    virtual bool loadDemandListItems(const QString &recordId,
+                                     QList<DemandListItem> *items,
+                                     QString *errorMessage = nullptr) const = 0;
+    virtual bool analyzeDemandListFulfillment(const QString &recordId,
+                                              int buildCount,
+                                              QList<InventoryFulfillmentResult> *results,
+                                              QString *errorMessage = nullptr) const = 0;
     virtual bool exportInventoryFulfillment(const QList<InventoryFulfillmentResult> &results,
+                                            const QString &sourceFilePath,
                                             const QString &filePath,
                                             QString *errorMessage = nullptr) const = 0;
     virtual bool applyInventoryFulfillment(const QList<InventoryFulfillmentResult> &results,

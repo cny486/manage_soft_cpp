@@ -1,0 +1,19 @@
+﻿{
+    "latestVersion":  "1.0.4",
+    "minimumSupportedVersion":  "1.0.0",
+    "releases":  [
+                     {
+                         "version":  "1.0.4",
+                         "title":  "配单全库存手动选择",
+                         "publishedAt":  "2026-08-05",
+                         "mandatory":  false,
+                         "packageFile":  "./ManageSoftCpp-update.zip",
+                         "sha256":  "db2d302050f6706949ebc9170b8e76295a65bb948f2d04b9d9c0f431c3d7132e",
+                         "description":  [
+                                             "配单元件支持浏览全部库存。",
+                                             "库存浏览默认按当前配单需求的相关度排序。",
+                                             "保留候选匹配机制，同时允许手动选择任意库存元件。"
+                                         ]
+                     }
+                 ]
+}
