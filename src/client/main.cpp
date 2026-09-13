@@ -6,6 +6,7 @@
 
 #include "aiapisettings.h"
 #include "appservice.h"
+#include "clientupdatemanager.h"
 #include "connectionsettings.h"
 #include "connectionsettingsdialog.h"
 #include "datainitializer.h"
@@ -90,7 +91,7 @@ bool applyConnectionSettings(QWidget *parent,
                              bool showSuccessMessage)
 {
     const ConnectionSettings currentSettings = loadConnectionSettings();
-    ConnectionSettingsDialog dialog(currentSettings, parent);
+    ConnectionSettingsDialog dialog(currentSettings, service->get(), parent);
     if (dialog.exec() != QDialog::Accepted) {
         return false;
     }
@@ -137,6 +138,18 @@ bool applyConnectionSettings(QWidget *parent,
                                  QStringLiteral("连接设置和 AI 设置已保存，并已立即重建当前连接。"));
     }
     return true;
+}
+
+ClientUpdateAction handleClientUpdateAfterLogin(QWidget *parent,
+                                                AppService *service)
+{
+    auto *tcpClient = dynamic_cast<TcpAppServiceClient *>(service);
+    if (tcpClient == nullptr) {
+        return ClientUpdateAction::Proceed;
+    }
+
+    QString updateError;
+    return ClientUpdateManager::handlePostLoginUpdateCheck(parent, tcpClient, &updateError);
 }
 }
 
@@ -222,12 +235,21 @@ int main(int argc, char *argv[])
     if (startupLoginDialog.exec() != QDialog::Accepted) {
         return 0;
     }
+
+    const ClientUpdateAction startupUpdateAction = handleClientUpdateAfterLogin(nullptr, initialService.get());
+    if (startupUpdateAction != ClientUpdateAction::Proceed) {
+        return 0;
+    }
+
     statusMessage = statusMessageWithUser(statusMessage, initialService.get());
 
     std::function<void(QWidget *)> openConnectionSettings;
     openConnectionSettings = [&openConnectionSettings](QWidget *parent) {
         const ConnectionSettings currentSettings = loadConnectionSettings();
-        ConnectionSettingsDialog dialog(currentSettings, parent);
+        auto *currentWindow = dynamic_cast<MainWindow *>(parent);
+        ConnectionSettingsDialog dialog(currentSettings,
+                                        currentWindow == nullptr ? nullptr : currentWindow->storageService(),
+                                        parent);
         if (dialog.exec() != QDialog::Accepted) {
             return;
         }
@@ -270,12 +292,17 @@ int main(int argc, char *argv[])
             return;
         }
 
+        const ClientUpdateAction updateAction = handleClientUpdateAfterLogin(parent, replacementService.get());
+        if (updateAction != ClientUpdateAction::Proceed) {
+            qApp->quit();
+            return;
+        }
+
         replacementStatusMessage = statusMessageWithUser(replacementStatusMessage, replacementService.get());
         saveConnectionSettings(newSettings);
         saveAiApiSettings(newAiSettings);
         saveEmailSettings(newEmailSettings);
 
-        MainWindow *currentWindow = dynamic_cast<MainWindow *>(parent);
         auto *newWindow = new MainWindow(replacementService.release(),
                                          replacementStatusMessage,
                                          openConnectionSettings);

@@ -2,7 +2,7 @@
 
 #include "inventoryitempickerdialog.h"
 #include "inventorytransactiondialog.h"
-#include "recorddialog.h"
+#include "inventoryrecorddialog.h"
 
 #include <QDate>
 #include <QDialogButtonBox>
@@ -60,10 +60,12 @@ QList<FieldDefinition> stockEntryDialogFields(const QList<FieldDefinition> &fiel
 
 ManualStockInDialog::ManualStockInDialog(const QList<FieldDefinition> &fields,
                                          const QList<QVariantMap> &inventoryRecords,
+                                         AppService *service,
                                          QWidget *parent)
     : QDialog(parent),
       m_fields(fields),
-      m_inventoryRecords(inventoryRecords)
+      m_inventoryRecords(inventoryRecords),
+      m_service(service)
 {
     setWindowTitle(QStringLiteral("手动入库"));
     resize(920, 560);
@@ -182,7 +184,7 @@ void ManualStockInDialog::accept()
 
 void ManualStockInDialog::addExistingItem()
 {
-    InventoryItemPickerDialog picker(m_inventoryRecords, this);
+    InventoryItemPickerDialog picker(m_inventoryRecords, {}, this);
     if (picker.exec() != QDialog::Accepted) {
         return;
     }
@@ -213,7 +215,11 @@ void ManualStockInDialog::addExistingItem()
 
 void ManualStockInDialog::addNewItem()
 {
-    RecordDialog dialog(QStringLiteral("新增入库项目"), stockEntryDialogFields(m_fields), this);
+    InventoryRecordDialog dialog(QStringLiteral("新增入库项目"),
+                                 stockEntryDialogFields(m_fields),
+                                 m_service,
+                                 {},
+                                 this);
 
     QVariantMap defaultRecord;
     defaultRecord.insert(QStringLiteral("quantity"), 1);

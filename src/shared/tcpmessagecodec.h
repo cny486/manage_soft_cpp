@@ -17,6 +17,9 @@ QList<FieldDefinition> fieldDefinitionsFromJson(const QJsonArray &array);
 QJsonArray variantMapsToJson(const QList<QVariantMap> &records);
 QList<QVariantMap> variantMapsFromJson(const QJsonArray &array);
 
+QJsonArray demandListItemsToJson(const QList<DemandListItem> &items);
+QList<DemandListItem> demandListItemsFromJson(const QJsonArray &array);
+
 QJsonArray fulfillmentResultsToJson(const QList<InventoryFulfillmentResult> &results);
 QList<InventoryFulfillmentResult> fulfillmentResultsFromJson(const QJsonArray &array);
 

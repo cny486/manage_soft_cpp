@@ -10,6 +10,7 @@ set(CMAKE_AUTORCC ON)
 
 option(MANAGE_SOFT_BUILD_CLIENT "Build the desktop client" ON)
 option(MANAGE_SOFT_BUILD_SERVER "Build the TCP backend server" ON)
+option(MANAGE_SOFT_BUILD_UPDATER "Build the desktop updater helper" ON)
 
 if(NOT MANAGE_SOFT_BUILD_CLIENT AND NOT MANAGE_SOFT_BUILD_SERVER)
     message(FATAL_ERROR "At least one of MANAGE_SOFT_BUILD_CLIENT or MANAGE_SOFT_BUILD_SERVER must be ON.")
@@ -58,6 +59,9 @@ add_subdirectory(src/shared)
 
 if(MANAGE_SOFT_BUILD_CLIENT)
     add_subdirectory(src/client)
+    if(MANAGE_SOFT_BUILD_UPDATER)
+        add_subdirectory(src/updater)
+    endif()
 endif()
 
 if(MANAGE_SOFT_BUILD_SERVER)

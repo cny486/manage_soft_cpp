@@ -1,1 +1,0 @@
--ID:/work/manage_soft_cpp/build/src/shared/ManageSoftShared_autogen/include -ID:/work/manage_soft_cpp/src/shared -isystem D:/Qt/5.15.2/mingw81_64/include -isystem D:/Qt/5.15.2/mingw81_64/include/QtCore -isystem "D:/Qt/5.15.2/mingw81_64/./mkspecs/win32-g++" -isystem D:/Qt/5.15.2/mingw81_64/include/QtNetwork

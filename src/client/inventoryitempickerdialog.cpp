@@ -1,4 +1,6 @@
 #include "inventoryitempickerdialog.h"
+#include "inventorysearchutils.h"
+#include "searchhighlightdelegate.h"
 
 #include <QDialogButtonBox>
 #include <QHeaderView>
@@ -9,6 +11,8 @@
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace {
 QString inventoryRecordSummary(const QVariantMap &record)
@@ -37,9 +41,11 @@ QString inventoryRecordSummary(const QVariantMap &record)
 }
 
 InventoryItemPickerDialog::InventoryItemPickerDialog(const QList<QVariantMap> &inventoryRecords,
+                                                     const QStringList &relevanceKeywords,
                                                      QWidget *parent)
     : QDialog(parent),
-      m_inventoryRecords(inventoryRecords)
+      m_inventoryRecords(inventoryRecords),
+      m_relevanceKeywords(relevanceKeywords)
 {
     setWindowTitle(QStringLiteral("选择已有物料"));
     resize(860, 520);
@@ -75,6 +81,8 @@ InventoryItemPickerDialog::InventoryItemPickerDialog(const QList<QVariantMap> &i
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_table->verticalHeader()->setVisible(false);
+    m_highlightDelegate = new SearchHighlightDelegate(m_table);
+    m_table->setItemDelegate(m_highlightDelegate);
 
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttonBox, &QDialogButtonBox::accepted, this, &InventoryItemPickerDialog::accept);
@@ -111,6 +119,9 @@ void InventoryItemPickerDialog::accept()
 void InventoryItemPickerDialog::refreshTable()
 {
     m_visibleRecords = filteredRecords();
+    if (m_highlightDelegate != nullptr) {
+        m_highlightDelegate->setKeyword(m_searchEdit->text().trimmed());
+    }
     m_table->setRowCount(m_visibleRecords.size());
     for (int row = 0; row < m_visibleRecords.size(); ++row) {
         const QVariantMap &record = m_visibleRecords.at(row);
@@ -119,25 +130,48 @@ void InventoryItemPickerDialog::refreshTable()
         m_table->setItem(row, 2, new QTableWidgetItem(record.value(QStringLiteral("unit")).toString()));
         m_table->setItem(row, 3, new QTableWidgetItem(record.value(QStringLiteral("location")).toString()));
     }
+    m_table->viewport()->update();
 }
 
 QList<QVariantMap> InventoryItemPickerDialog::filteredRecords() const
 {
     const QString keyword = m_searchEdit->text().trimmed();
-    if (keyword.isEmpty()) {
+    if (!keyword.isEmpty()) {
+        return rankInventoryRecordsByKeyword(m_inventoryRecords, keyword);
+    }
+
+    if (m_relevanceKeywords.isEmpty()) {
         return m_inventoryRecords;
     }
 
-    QList<QVariantMap> matches;
-    for (const QVariantMap &record : m_inventoryRecords) {
-        const QString haystack = QStringLiteral("%1 %2 %3 %4")
-                                     .arg(record.value(QStringLiteral("uniqueId")).toString(),
-                                          record.value(QStringLiteral("name")).toString(),
-                                          record.value(QStringLiteral("manufacturerPart")).toString(),
-                                          record.value(QStringLiteral("manufacturer")).toString());
-        if (haystack.contains(keyword, Qt::CaseInsensitive)) {
-            matches.append(record);
+    struct ScoredRecord {
+        QVariantMap record;
+        int score = 0;
+        int originalIndex = -1;
+    };
+
+    QList<ScoredRecord> scoredRecords;
+    scoredRecords.reserve(m_inventoryRecords.size());
+    for (int index = 0; index < m_inventoryRecords.size(); ++index) {
+        const QVariantMap &record = m_inventoryRecords.at(index);
+        int score = 0;
+        for (const QString &relevanceKeyword : m_relevanceKeywords) {
+            score += inventoryRecordSearchScore(record, relevanceKeyword);
         }
+        scoredRecords.append({record, score, index});
     }
-    return matches;
+
+    std::sort(scoredRecords.begin(), scoredRecords.end(), [](const ScoredRecord &left, const ScoredRecord &right) {
+        if (left.score != right.score) {
+            return left.score > right.score;
+        }
+        return left.originalIndex < right.originalIndex;
+    });
+
+    QList<QVariantMap> rankedRecords;
+    rankedRecords.reserve(scoredRecords.size());
+    for (const ScoredRecord &entry : scoredRecords) {
+        rankedRecords.append(entry.record);
+    }
+    return rankedRecords;
 }

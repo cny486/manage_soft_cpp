@@ -6,6 +6,8 @@
 
 #include <QDialog>
 
+class AppService;
+
 class QCheckBox;
 class QLineEdit;
 class QPushButton;
@@ -14,6 +16,7 @@ class QSpinBox;
 class ConnectionSettingsDialog : public QDialog {
 public:
     explicit ConnectionSettingsDialog(const ConnectionSettings &settings,
+                                      AppService *service,
                                       QWidget *parent = nullptr);
 
     ConnectionSettings settings() const;
@@ -26,6 +29,7 @@ private:
     void testAiConnection();
 
     EmailSettings m_loadedEmailSettings;
+    AppService *m_service = nullptr;
 
     QCheckBox *m_localStorageCheck = nullptr;
     QLineEdit *m_serverHostEdit = nullptr;

@@ -1,5 +1,6 @@
 #include "tcpappserviceclient.h"
 
+#include "appversion.h"
 #include "tcpmessagecodec.h"
 
 #include <QFile>
@@ -12,7 +13,7 @@ namespace {
 QJsonObject makeRequest(const QString &action, const QJsonObject &payload)
 {
     return {
-        {QStringLiteral("version"), 1},
+        {QStringLiteral("version"), AppVersion::protocolVersion()},
         {QStringLiteral("requestId"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
         {QStringLiteral("action"), action},
         {QStringLiteral("payload"), payload}
@@ -94,15 +95,6 @@ QJsonArray reimbursementAttachmentUploads(const QVariantMap &record, QString *er
     return uploads;
 }
 
-QJsonObject aiSettingsToJson(const AiApiSettings &settings)
-{
-    return {
-        {QStringLiteral("apiUrl"), settings.apiUrl},
-        {QStringLiteral("apiKey"), settings.apiKey},
-        {QStringLiteral("model"), settings.model},
-        {QStringLiteral("timeoutMs"), settings.timeoutMs}
-    };
-}
 }
 
 TcpAppServiceClient::TcpAppServiceClient(const QString &host, quint16 port, int timeoutMs)
@@ -518,6 +510,7 @@ bool TcpAppServiceClient::importInventoryBom(const QString &filePath,
 }
 
 bool TcpAppServiceClient::analyzeInventoryFulfillment(const QString &filePath,
+                                                      int fulfillmentSetCount,
                                                       QList<InventoryFulfillmentResult> *results,
                                                       QString *errorMessage) const
 {
@@ -529,9 +522,11 @@ bool TcpAppServiceClient::analyzeInventoryFulfillment(const QString &filePath,
     QJsonObject response;
     if (!sendRequest(QStringLiteral("inventory.fulfillment.analyze"),
                      {{QStringLiteral("fileName"), QFileInfo(filePath).fileName()},
+                      {QStringLiteral("fulfillmentSetCount"), fulfillmentSetCount},
                       {QStringLiteral("fileContentBase64"), QString::fromLatin1(content.toBase64())}},
                      &response,
-                     errorMessage)) {
+                     errorMessage,
+                     fulfillmentRequestTimeoutMs())) {
         return false;
     }
 
@@ -584,15 +579,151 @@ bool TcpAppServiceClient::enrichInventoryRecord(const QString &manufacturerPart,
     return true;
 }
 
+bool TcpAppServiceClient::importDemandList(const QString &name,
+                                           const QString &filePath,
+                                           QString *errorMessage) const
+{
+    QByteArray content;
+    if (!readFileBytes(filePath, &content, errorMessage)) {
+        return false;
+    }
+
+    QJsonObject response;
+    if (!sendRequest(QStringLiteral("demand.list.import"),
+                     {{QStringLiteral("name"), name.trimmed()},
+                      {QStringLiteral("fileName"), QFileInfo(filePath).fileName()},
+                      {QStringLiteral("fileContentBase64"), QString::fromLatin1(content.toBase64())}},
+                     &response,
+                     errorMessage,
+                     fulfillmentRequestTimeoutMs())) {
+        return false;
+    }
+
+    QString message;
+    const bool success = responseSucceeded(response, &message);
+    if (errorMessage != nullptr) {
+        *errorMessage = message;
+    }
+    return success;
+}
+
+bool TcpAppServiceClient::exportDemandList(const QString &recordId,
+                                           const QString &filePath,
+                                           QString *errorMessage) const
+{
+    QJsonObject response;
+    if (!sendRequest(QStringLiteral("demand.list.export"),
+                     {{QStringLiteral("recordId"), recordId}},
+                     &response,
+                     errorMessage,
+                     fulfillmentRequestTimeoutMs())) {
+        return false;
+    }
+
+    QString message;
+    if (!responseSucceeded(response, &message)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = message;
+        }
+        return false;
+    }
+
+    const QByteArray content = QByteArray::fromBase64(
+        response.value(QStringLiteral("payload")).toObject().value(QStringLiteral("fileContentBase64")).toString().toLatin1());
+    if (!writeFileBytes(filePath, content, errorMessage)) {
+        return false;
+    }
+    if (errorMessage != nullptr) {
+        *errorMessage = message;
+    }
+    return true;
+}
+
+bool TcpAppServiceClient::loadDemandListItems(const QString &recordId,
+                                              QList<DemandListItem> *items,
+                                              QString *errorMessage) const
+{
+    if (items == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("清单条目输出参数不能为空。");
+        }
+        return false;
+    }
+
+    QJsonObject response;
+    if (!sendRequest(QStringLiteral("demand.list.items"),
+                     {{QStringLiteral("recordId"), recordId}},
+                     &response,
+                     errorMessage,
+                     fulfillmentRequestTimeoutMs())) {
+        return false;
+    }
+
+    QString message;
+    if (!responseSucceeded(response, &message)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = message;
+        }
+        return false;
+    }
+
+    *items = TcpMessageCodec::demandListItemsFromJson(
+        response.value(QStringLiteral("payload")).toObject().value(QStringLiteral("items")).toArray());
+    if (errorMessage != nullptr) {
+        *errorMessage = message;
+    }
+    return true;
+}
+
+bool TcpAppServiceClient::analyzeDemandListFulfillment(const QString &recordId,
+                                                       int buildCount,
+                                                       QList<InventoryFulfillmentResult> *results,
+                                                       QString *errorMessage) const
+{
+    QJsonObject response;
+    if (!sendRequest(QStringLiteral("demand.list.fulfillment.analyze"),
+                     {{QStringLiteral("recordId"), recordId},
+                      {QStringLiteral("buildCount"), buildCount}},
+                     &response,
+                     errorMessage,
+                     fulfillmentRequestTimeoutMs())) {
+        return false;
+    }
+
+    QString message;
+    const bool success = responseSucceeded(response, &message);
+    if (errorMessage != nullptr) {
+        *errorMessage = message;
+    }
+    if (!success) {
+        return false;
+    }
+
+    if (results != nullptr) {
+        *results = TcpMessageCodec::fulfillmentResultsFromJson(
+            response.value(QStringLiteral("payload")).toObject().value(QStringLiteral("results")).toArray());
+    }
+    return true;
+}
+
 bool TcpAppServiceClient::exportInventoryFulfillment(const QList<InventoryFulfillmentResult> &results,
+                                                     const QString &sourceFilePath,
                                                      const QString &filePath,
                                                      QString *errorMessage) const
 {
+    QByteArray sourceContent;
+    if (!readFileBytes(sourceFilePath, &sourceContent, errorMessage)) {
+        return false;
+    }
+
     QJsonObject response;
     if (!sendRequest(QStringLiteral("inventory.fulfillment.export"),
-                     {{QStringLiteral("results"), TcpMessageCodec::fulfillmentResultsToJson(results)}},
+                     {{QStringLiteral("results"), TcpMessageCodec::fulfillmentResultsToJson(results)},
+                      {QStringLiteral("sourceFileName"), QFileInfo(sourceFilePath).fileName()},
+                      {QStringLiteral("sourceFileContentBase64"), QString::fromLatin1(sourceContent.toBase64())}},
                      &response,
-                     errorMessage)) {
+                     errorMessage,
+                     fulfillmentRequestTimeoutMs())) {
         return false;
     }
 
@@ -687,16 +818,15 @@ bool TcpAppServiceClient::ping(QString *errorMessage) const
     return success;
 }
 
-bool TcpAppServiceClient::testAiConnection(const AiApiSettings &settings,
-                                           QString *responsePreview,
+bool TcpAppServiceClient::testAiConnection(QString *responsePreview,
                                            QString *errorMessage) const
 {
     QJsonObject response;
     if (!sendRequest(QStringLiteral("inventory.agent.test"),
-                     {{QStringLiteral("aiSettings"), aiSettingsToJson(settings)}},
+                     {},
                      &response,
                      errorMessage,
-                     aiRequestTimeoutMs(settings.timeoutMs + 5000))) {
+                     aiRequestTimeoutMs())) {
         return false;
     }
 
@@ -711,6 +841,84 @@ bool TcpAppServiceClient::testAiConnection(const AiApiSettings &settings,
 
     if (responsePreview != nullptr) {
         *responsePreview = response.value(QStringLiteral("payload")).toObject().value(QStringLiteral("responsePreview")).toString();
+    }
+    return true;
+}
+
+bool TcpAppServiceClient::checkForClientUpdate(const QString &currentVersion,
+                                               ClientUpdateInfo *info,
+                                               QString *errorMessage) const
+{
+    if (info == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("Update result output buffer is invalid.");
+        }
+        return false;
+    }
+
+    QJsonObject response;
+    if (!sendRequest(QStringLiteral("client.update.check"),
+                     {{QStringLiteral("appVersion"), currentVersion.trimmed()}},
+                     &response,
+                     errorMessage)) {
+        return false;
+    }
+
+    QString message;
+    if (!responseSucceeded(response, &message)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = message;
+        }
+        return false;
+    }
+
+    *info = clientUpdateInfoFromJson(response.value(QStringLiteral("payload")).toObject());
+    if (errorMessage != nullptr) {
+        *errorMessage = message;
+    }
+    return true;
+}
+
+bool TcpAppServiceClient::downloadClientUpdatePackage(const QString &version,
+                                                      QString *fileName,
+                                                      QByteArray *content,
+                                                      QString *sha256,
+                                                      QString *errorMessage) const
+{
+    if (content == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("Update package content buffer is invalid.");
+        }
+        return false;
+    }
+
+    QJsonObject response;
+    if (!sendRequest(QStringLiteral("client.update.download"),
+                     {{QStringLiteral("version"), version.trimmed()}},
+                     &response,
+                     errorMessage,
+                     qMax(m_timeoutMs, 300000))) {
+        return false;
+    }
+
+    QString message;
+    if (!responseSucceeded(response, &message)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = message;
+        }
+        return false;
+    }
+
+    const QJsonObject payload = response.value(QStringLiteral("payload")).toObject();
+    *content = QByteArray::fromBase64(payload.value(QStringLiteral("fileContentBase64")).toString().toLatin1());
+    if (fileName != nullptr) {
+        *fileName = payload.value(QStringLiteral("fileName")).toString().trimmed();
+    }
+    if (sha256 != nullptr) {
+        *sha256 = payload.value(QStringLiteral("sha256")).toString().trimmed();
+    }
+    if (errorMessage != nullptr) {
+        *errorMessage = message;
     }
     return true;
 }
@@ -802,9 +1010,17 @@ bool TcpAppServiceClient::responseSucceeded(const QJsonObject &response, QString
 
 int TcpAppServiceClient::aiRequestTimeoutMs(int suggestedTimeoutMs) const
 {
-    const int minimumAiTimeoutMs = 65000;
+    const int minimumAiTimeoutMs = 125000;
     if (suggestedTimeoutMs > 0) {
         return qMax(qMax(m_timeoutMs, suggestedTimeoutMs), minimumAiTimeoutMs);
     }
     return qMax(m_timeoutMs, minimumAiTimeoutMs);
+}
+int TcpAppServiceClient::fulfillmentRequestTimeoutMs(int suggestedTimeoutMs) const
+{
+    const int minimumFulfillmentTimeoutMs = 120000;
+    if (suggestedTimeoutMs > 0) {
+        return qMax(qMax(m_timeoutMs, suggestedTimeoutMs), minimumFulfillmentTimeoutMs);
+    }
+    return qMax(m_timeoutMs, minimumFulfillmentTimeoutMs);
 }

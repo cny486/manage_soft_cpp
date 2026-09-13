@@ -33,6 +33,7 @@ enum class InventoryOperationType {
 
 enum class InventoryInputType {
     Manual,
+    Scanner,
     Excel
 };
 

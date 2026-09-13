@@ -29,11 +29,97 @@ FieldDefinition fieldDefinitionFromJson(const QJsonObject &object)
     return field;
 }
 
+QJsonObject demandListItemToJson(const DemandListItem &item)
+{
+    return {
+        {QStringLiteral("manufacturerPart"), item.manufacturerPart},
+        {QStringLiteral("name"), item.name},
+        {QStringLiteral("value"), item.value},
+        {QStringLiteral("footprint"), item.footprint},
+        {QStringLiteral("voltage"), item.voltage},
+        {QStringLiteral("manufacturer"), item.manufacturer},
+        {QStringLiteral("supplier"), item.supplier},
+        {QStringLiteral("device"), item.device},
+        {QStringLiteral("category"), item.category},
+        {QStringLiteral("designator"), item.designator},
+        {QStringLiteral("comment"), item.comment},
+        {QStringLiteral("quantity"), item.quantity},
+        {QStringLiteral("sourceRow"), item.sourceRow}
+    };
+}
+
+DemandListItem demandListItemFromJson(const QJsonObject &object)
+{
+    DemandListItem item;
+    item.manufacturerPart = object.value(QStringLiteral("manufacturerPart")).toString();
+    item.name = object.value(QStringLiteral("name")).toString();
+    item.value = object.value(QStringLiteral("value")).toString();
+    item.footprint = object.value(QStringLiteral("footprint")).toString();
+    item.voltage = object.value(QStringLiteral("voltage")).toString();
+    item.manufacturer = object.value(QStringLiteral("manufacturer")).toString();
+    item.supplier = object.value(QStringLiteral("supplier")).toString();
+    item.device = object.value(QStringLiteral("device")).toString();
+    item.category = object.value(QStringLiteral("category")).toString();
+    item.designator = object.value(QStringLiteral("designator")).toString();
+    item.comment = object.value(QStringLiteral("comment")).toString();
+    item.quantity = object.value(QStringLiteral("quantity")).toInt();
+    item.sourceRow = object.value(QStringLiteral("sourceRow")).toInt();
+    return item;
+}
+
+QJsonObject matchCandidateToJson(const InventoryMatchCandidate &candidate)
+{
+    return {
+        {QStringLiteral("itemId"), candidate.itemId},
+        {QStringLiteral("manufacturerPart"), candidate.manufacturerPart},
+        {QStringLiteral("manufacturer"), candidate.manufacturer},
+        {QStringLiteral("supplier"), candidate.supplier},
+        {QStringLiteral("name"), candidate.name},
+        {QStringLiteral("value"), candidate.value},
+        {QStringLiteral("footprint"), candidate.footprint},
+        {QStringLiteral("voltage"), candidate.voltage},
+        {QStringLiteral("uniqueId"), candidate.uniqueId},
+        {QStringLiteral("unit"), candidate.unit},
+        {QStringLiteral("location"), candidate.location},
+        {QStringLiteral("availableQuantity"), candidate.availableQuantity},
+        {QStringLiteral("score"), candidate.score},
+        {QStringLiteral("matchedFields"), QJsonArray::fromStringList(candidate.matchedFields)}
+    };
+}
+
+InventoryMatchCandidate matchCandidateFromJson(const QJsonObject &object)
+{
+    InventoryMatchCandidate candidate;
+    candidate.itemId = object.value(QStringLiteral("itemId")).toString();
+    candidate.manufacturerPart = object.value(QStringLiteral("manufacturerPart")).toString();
+    candidate.manufacturer = object.value(QStringLiteral("manufacturer")).toString();
+    candidate.supplier = object.value(QStringLiteral("supplier")).toString();
+    candidate.name = object.value(QStringLiteral("name")).toString();
+    candidate.value = object.value(QStringLiteral("value")).toString();
+    candidate.footprint = object.value(QStringLiteral("footprint")).toString();
+    candidate.voltage = object.value(QStringLiteral("voltage")).toString();
+    candidate.uniqueId = object.value(QStringLiteral("uniqueId")).toString();
+    candidate.unit = object.value(QStringLiteral("unit")).toString();
+    candidate.location = object.value(QStringLiteral("location")).toString();
+    candidate.availableQuantity = object.value(QStringLiteral("availableQuantity")).toInt();
+    candidate.score = object.value(QStringLiteral("score")).toInt();
+    const QJsonArray matchedFields = object.value(QStringLiteral("matchedFields")).toArray();
+    for (const QJsonValue &value : matchedFields) {
+        candidate.matchedFields.append(value.toString());
+    }
+    return candidate;
+}
+
 QJsonObject fulfillmentResultToJson(const InventoryFulfillmentResult &result)
 {
     QJsonArray sourceRows;
     for (const int row : result.sourceRows) {
         sourceRows.append(row);
+    }
+
+    QJsonArray candidates;
+    for (const InventoryMatchCandidate &candidate : result.candidates) {
+        candidates.append(matchCandidateToJson(candidate));
     }
 
     return {
@@ -46,8 +132,25 @@ QJsonObject fulfillmentResultToJson(const InventoryFulfillmentResult &result)
         {QStringLiteral("location"), result.location},
         {QStringLiteral("sourceFile"), result.sourceFile},
         {QStringLiteral("sourceRows"), sourceRows},
+        {QStringLiteral("requestManufacturerPart"), result.requestManufacturerPart},
+        {QStringLiteral("requestName"), result.requestName},
+        {QStringLiteral("requestValue"), result.requestValue},
+        {QStringLiteral("requestFootprint"), result.requestFootprint},
+        {QStringLiteral("requestVoltage"), result.requestVoltage},
+        {QStringLiteral("requestManufacturer"), result.requestManufacturer},
+        {QStringLiteral("requestSupplier"), result.requestSupplier},
+        {QStringLiteral("requestDevice"), result.requestDevice},
+        {QStringLiteral("requestCategory"), result.requestCategory},
+        {QStringLiteral("requestDesignator"), result.requestDesignator},
+        {QStringLiteral("requestComment"), result.requestComment},
+        {QStringLiteral("sourceHeaders"), QJsonArray::fromStringList(result.sourceHeaders)},
+        {QStringLiteral("sourceRowValues"), QJsonArray::fromStringList(result.sourceRowValues)},
         {QStringLiteral("requiredQuantity"), result.requiredQuantity},
         {QStringLiteral("availableQuantity"), result.availableQuantity},
+        {QStringLiteral("matchScore"), result.matchScore},
+        {QStringLiteral("confirmed"), result.confirmed},
+        {QStringLiteral("matchedFields"), QJsonArray::fromStringList(result.matchedFields)},
+        {QStringLiteral("candidates"), candidates},
         {QStringLiteral("status"), static_cast<int>(result.status)}
     };
 }
@@ -67,8 +170,37 @@ InventoryFulfillmentResult fulfillmentResultFromJson(const QJsonObject &object)
     for (const QJsonValue &value : sourceRows) {
         result.sourceRows.append(value.toInt());
     }
+    result.requestManufacturerPart = object.value(QStringLiteral("requestManufacturerPart")).toString();
+    result.requestName = object.value(QStringLiteral("requestName")).toString();
+    result.requestValue = object.value(QStringLiteral("requestValue")).toString();
+    result.requestFootprint = object.value(QStringLiteral("requestFootprint")).toString();
+    result.requestVoltage = object.value(QStringLiteral("requestVoltage")).toString();
+    result.requestManufacturer = object.value(QStringLiteral("requestManufacturer")).toString();
+    result.requestSupplier = object.value(QStringLiteral("requestSupplier")).toString();
+    result.requestDevice = object.value(QStringLiteral("requestDevice")).toString();
+    result.requestCategory = object.value(QStringLiteral("requestCategory")).toString();
+    result.requestDesignator = object.value(QStringLiteral("requestDesignator")).toString();
+    result.requestComment = object.value(QStringLiteral("requestComment")).toString();
+    const QJsonArray sourceHeaders = object.value(QStringLiteral("sourceHeaders")).toArray();
+    for (const QJsonValue &value : sourceHeaders) {
+        result.sourceHeaders.append(value.toString());
+    }
+    const QJsonArray sourceRowValues = object.value(QStringLiteral("sourceRowValues")).toArray();
+    for (const QJsonValue &value : sourceRowValues) {
+        result.sourceRowValues.append(value.toString());
+    }
     result.requiredQuantity = object.value(QStringLiteral("requiredQuantity")).toInt();
     result.availableQuantity = object.value(QStringLiteral("availableQuantity")).toInt();
+    result.matchScore = object.value(QStringLiteral("matchScore")).toInt();
+    result.confirmed = object.value(QStringLiteral("confirmed")).toBool();
+    const QJsonArray matchedFields = object.value(QStringLiteral("matchedFields")).toArray();
+    for (const QJsonValue &value : matchedFields) {
+        result.matchedFields.append(value.toString());
+    }
+    const QJsonArray candidates = object.value(QStringLiteral("candidates")).toArray();
+    for (const QJsonValue &value : candidates) {
+        result.candidates.append(matchCandidateFromJson(value.toObject()));
+    }
     result.status = static_cast<InventoryFulfillmentStatus>(object.value(QStringLiteral("status")).toInt());
     return result;
 }
@@ -160,6 +292,24 @@ QList<QVariantMap> TcpMessageCodec::variantMapsFromJson(const QJsonArray &array)
         records.append(value.toObject().toVariantMap());
     }
     return records;
+}
+
+QJsonArray TcpMessageCodec::demandListItemsToJson(const QList<DemandListItem> &items)
+{
+    QJsonArray array;
+    for (const DemandListItem &item : items) {
+        array.append(demandListItemToJson(item));
+    }
+    return array;
+}
+
+QList<DemandListItem> TcpMessageCodec::demandListItemsFromJson(const QJsonArray &array)
+{
+    QList<DemandListItem> items;
+    for (const QJsonValue &value : array) {
+        items.append(demandListItemFromJson(value.toObject()));
+    }
+    return items;
 }
 
 QJsonArray TcpMessageCodec::fulfillmentResultsToJson(const QList<InventoryFulfillmentResult> &results)

@@ -229,8 +229,10 @@ $env:MANAGE_SOFT_AI_TIMEOUT_MS = "30000"
 ./ManageSoftServer.exe --listen-host 0.0.0.0 --listen-port 45454
 ```
 
+客户端远程模式的“测试 AI 连接”会使用当前已登录服务器的上述配置；客户端不会向后端发送 API Key 或覆盖服务器配置。后端 TCP 服务应只部署在受信任网络中，并建议置于 TLS 终端或 VPN 后。
+
 ### 本地模式说明
 
 如果客户端使用 `--local-storage` 启动，则 AI 补齐在客户端进程内执行。
 
-也就是说，本地模式下需要给 `ManageSoftCpp.exe` 自身设置同样的环境变量，功能才会生效。
+也就是说，本地模式下需要给 `ManageSoftCpp.exe` 自身设置同样的环境变量，或在“连接设置”中填写并保存本机 AI 配置。

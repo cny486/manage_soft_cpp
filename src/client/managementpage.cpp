@@ -4,8 +4,11 @@
 #include "inventoryhistorydialog.h"
 #include "inventoryfulfillmentdialog.h"
 #include "manualstockindialog.h"
+#include "scanstockindialog.h"
 #include "inventoryitempickerdialog.h"
 #include "inventoryrecorddialog.h"
+#include "inventorysearchutils.h"
+#include "searchhighlightdelegate.h"
 #include "inventorytransactiondialog.h"
 
 #include "recorddialog.h"
@@ -27,7 +30,9 @@
 #include <QObject>
 #include <QPushButton>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QRegularExpression>
+#include <QProgressDialog>
 #include <QSignalBlocker>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -180,6 +185,16 @@ QString inventoryRecordSummary(const QVariantMap &record)
     return parts.join(QStringLiteral(" / "));
 }
 
+QVariantMap normalizeLegacyInventoryFeature(QVariantMap record)
+{
+    const QString feature = record.value(QStringLiteral("feature")).toString().trimmed();
+    const QString legacyVoltage = record.value(QStringLiteral("voltage")).toString().trimmed();
+    if (feature.isEmpty() && !legacyVoltage.isEmpty()) {
+        record.insert(QStringLiteral("feature"), legacyVoltage);
+    }
+    return record;
+}
+
 QString sectionPanelStyle()
 {
     return QStringLiteral(
@@ -226,19 +241,39 @@ void setButtonVariant(QPushButton *button, const QString &variant)
 
 QList<FieldDefinition> stockEditDialogFields(const QList<FieldDefinition> &fields)
 {
-    return prioritizedFields(fields,
-                             {
-                                 QStringLiteral("manufacturerPart"),
-                                 QStringLiteral("quantity"),
-                                 QStringLiteral("location"),
-                                 QStringLiteral("date")
-                             },
-                             {
-                                 QStringLiteral("manufacturerPart"),
-                                 QStringLiteral("quantity"),
-                                 QStringLiteral("location"),
-                                 QStringLiteral("date")
-                             });
+    const QStringList editableKeys = {
+        QStringLiteral("manufacturerPart"),
+        QStringLiteral("quantity"),
+        QStringLiteral("category"),
+        QStringLiteral("value"),
+        QStringLiteral("footprint"),
+        QStringLiteral("precision"),
+        QStringLiteral("feature"),
+        QStringLiteral("supplier"),
+        QStringLiteral("date"),
+        QStringLiteral("location")
+    };
+
+    QList<FieldDefinition> filteredFields;
+    filteredFields.reserve(editableKeys.size());
+    for (const QString &key : editableKeys) {
+        for (const FieldDefinition &field : fields) {
+            if (field.key != key) {
+                continue;
+            }
+
+            FieldDefinition adjustedField = field;
+            if (key == QStringLiteral("manufacturerPart")
+                || key == QStringLiteral("quantity")) {
+                adjustedField.required = true;
+            }
+
+            filteredFields.append(adjustedField);
+            break;
+        }
+    }
+
+    return filteredFields;
 }
 
 QToolButton *createOverflowMenuButton(QMenu *menu, QWidget *parent)
@@ -549,7 +584,12 @@ ManagementPage::ManagementPage(const PageConfig &config,
 
 void ManagementPage::reloadRecords()
 {
-    const QList<QVariantMap> allRecords = m_storageService->loadPageRecords(m_config.pageId);
+    QList<QVariantMap> allRecords = m_storageService->loadPageRecords(m_config.pageId);
+    if (isInventoryPage()) {
+        for (QVariantMap &record : allRecords) {
+            record = normalizeLegacyInventoryFeature(record);
+        }
+    }
     if (isInventoryPage() || isReimbursementPage()) {
         updateCategoryFilterOptions(allRecords);
     }
@@ -698,16 +738,20 @@ void ManagementPage::buildUi()
         auto *fulfillmentButton = new QPushButton(QStringLiteral("配单"), this);
         auto *stockOutButton = new QPushButton(QStringLiteral("出库"), this);
         auto *stockInButton = new QPushButton(QStringLiteral("入库"), this);
+        auto *scanStockInButton = new QPushButton(QStringLiteral("扫码入库"), this);
         auto *selectAllButton = new QPushButton(QStringLiteral("全选"), this);
         auto *deleteSelectedButton = new QPushButton(QStringLiteral("删除选中"), this);
+        auto *aiEnrichAllButton = new QPushButton(QStringLiteral("一键 AI 补齐"), this);
         auto *exportButton = new QPushButton(QStringLiteral("导出 Excel"), this);
         auto *refreshButton = new QPushButton(QStringLiteral("刷新"), this);
 
         setButtonVariant(fulfillmentButton, QStringLiteral("primary"));
         setButtonVariant(stockOutButton, QStringLiteral("primary"));
         setButtonVariant(stockInButton, QStringLiteral("primary"));
+        setButtonVariant(scanStockInButton, QStringLiteral("primary"));
         setButtonVariant(selectAllButton, QStringLiteral("subtle"));
         setButtonVariant(deleteSelectedButton, QStringLiteral("danger"));
+        setButtonVariant(aiEnrichAllButton, QStringLiteral("primary"));
         setButtonVariant(exportButton, QStringLiteral("subtle"));
         setButtonVariant(refreshButton, QStringLiteral("subtle"));
 
@@ -718,8 +762,10 @@ void ManagementPage::buildUi()
         connect(fulfillmentButton, &QPushButton::clicked, this, [this]() { fulfillDemandRecord(); });
         connect(stockOutButton, &QPushButton::clicked, this, [this]() { stockOutRecord(); });
         connect(stockInButton, &QPushButton::clicked, this, [this]() { stockInRecord(); });
+        connect(scanStockInButton, &QPushButton::clicked, this, [this]() { scanStockInRecord(); });
         connect(selectAllButton, &QPushButton::clicked, this, [this]() { selectAllRecords(); });
         connect(deleteSelectedButton, &QPushButton::clicked, this, [this]() { deleteSelectedRecords(); });
+        connect(aiEnrichAllButton, &QPushButton::clicked, this, [this]() { enrichAllInventoryRecords(); });
         connect(allHistoryAction, &QAction::triggered, this, [this]() { viewInventoryHistory(); });
         connect(stockInHistoryAction, &QAction::triggered, this, [this]() {
             viewInventoryHistory(QStringLiteral("入库"));
@@ -737,9 +783,11 @@ void ManagementPage::buildUi()
         connect(refreshButton, &QPushButton::clicked, this, [this]() { reloadRecords(); });
 
         manualLayout->addWidget(stockInButton);
+        manualLayout->addWidget(scanStockInButton);
         manualLayout->addWidget(stockOutButton);
         manualLayout->addWidget(fulfillmentButton);
         manualLayout->addWidget(deleteSelectedButton);
+        manualLayout->addWidget(aiEnrichAllButton);
         manualLayout->addWidget(selectAllButton);
         manualLayout->addWidget(exportButton);
         manualLayout->addWidget(refreshButton);
@@ -819,10 +867,15 @@ void ManagementPage::buildUi()
     m_table->setAlternatingRowColors(true);
     m_table->setShowGrid(false);
     m_table->setFrameShape(QFrame::NoFrame);
+    m_table->setWordWrap(false);
+    m_table->setTextElideMode(Qt::ElideRight);
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_table->verticalHeader()->setVisible(false);
+    m_table->verticalHeader()->setDefaultSectionSize(42);
+    m_highlightDelegate = new SearchHighlightDelegate(m_table);
+    m_table->setItemDelegate(m_highlightDelegate);
     if (isInventoryPage()) {
         m_table->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(m_table, &QTableWidget::customContextMenuRequested, this, [this](const QPoint &position) {
@@ -875,6 +928,11 @@ void ManagementPage::buildUi()
 void ManagementPage::refreshTable(const QList<QVariantMap> &records)
 {
     m_visibleRecords = records;
+    if (m_highlightDelegate != nullptr) {
+        m_highlightDelegate->setKeyword(isInventoryPage() && m_searchEdit != nullptr
+                                            ? m_searchEdit->text().trimmed()
+                                            : QString());
+    }
     m_table->setRowCount(records.size());
     const QList<FieldDefinition> visibleFields = listFields();
 
@@ -900,6 +958,7 @@ void ManagementPage::refreshTable(const QList<QVariantMap> &records)
                                                    m_table);
                     setButtonVariant(button, QStringLiteral("subtle"));
                     button->setCursor(Qt::PointingHandCursor);
+                    button->setToolTip(displayName);
                     connect(button, &QPushButton::clicked, this, [this, row]() {
                         m_table->selectRow(row);
                         downloadInvoiceAttachment(row);
@@ -908,6 +967,7 @@ void ManagementPage::refreshTable(const QList<QVariantMap> &records)
 
                     auto *item = new QTableWidgetItem(displayName);
                     item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+                    item->setToolTip(displayName);
                     if (column == 0) {
                         item->setData(Qt::UserRole, record.value("id").toString());
                     }
@@ -918,6 +978,7 @@ void ManagementPage::refreshTable(const QList<QVariantMap> &records)
 
             auto *item = new QTableWidgetItem(recordValueText(record, field));
             item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            item->setToolTip(item->text());
             if (column == 0) {
                 item->setData(Qt::UserRole, record.value("id").toString());
             }
@@ -926,6 +987,7 @@ void ManagementPage::refreshTable(const QList<QVariantMap> &records)
         if (m_config.showUpdatedAt) {
             auto *updatedAtItem = new QTableWidgetItem(record.value("updatedAt").toString());
             updatedAtItem->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            updatedAtItem->setToolTip(updatedAtItem->text());
             m_table->setItem(row, visibleFields.size(), updatedAtItem);
         }
     }
@@ -934,6 +996,7 @@ void ManagementPage::refreshTable(const QList<QVariantMap> &records)
                                .arg(records.size())
                                .arg(m_storageService->storageRoot()));
     m_statusLabel->setStyleSheet(QStringLiteral("color: #71888c; font-size: 12px; padding-top: 6px;"));
+    m_table->viewport()->update();
 }
 
 void ManagementPage::configureTableColumns()
@@ -986,7 +1049,7 @@ QList<QVariantMap> ManagementPage::filteredRecords(const QList<QVariantMap> &all
                                          ? QString()
                                          : m_reimbursedStatusFilterCombo->currentData().toString();
 
-    QList<QVariantMap> matches;
+    QList<QVariantMap> candidateMatches;
     for (const QVariantMap &record : allRecords) {
         if (!category.isEmpty()
             && record.value(QStringLiteral("category")).toString().trimmed() != category) {
@@ -1015,18 +1078,28 @@ QList<QVariantMap> ManagementPage::filteredRecords(const QList<QVariantMap> &all
         }
 
         if (keyword.isEmpty()) {
-            matches.append(record);
+            candidateMatches.append(record);
+            continue;
+        }
+
+        if (isInventoryPage()) {
+            candidateMatches.append(record);
             continue;
         }
 
         for (const QString &key : m_config.searchableKeys) {
             if (record.value(key).toString().contains(keyword, Qt::CaseInsensitive)) {
-                matches.append(record);
+                candidateMatches.append(record);
                 break;
             }
         }
     }
-    return matches;
+
+    if (keyword.isEmpty() || !isInventoryPage()) {
+        return candidateMatches;
+    }
+
+    return rankInventoryRecordsByKeyword(candidateMatches, keyword);
 }
 
 void ManagementPage::updateCategoryFilterOptions(const QList<QVariantMap> &allRecords)
@@ -1141,10 +1214,10 @@ void ManagementPage::directUpdateRecord()
     }
 
     InventoryRecordDialog dialog(QStringLiteral("直接修改库存记录"),
-                                 stockEditDialogFields(m_config.fields),
-                                 m_storageService,
-                                 {QStringLiteral("category"), QStringLiteral("value")},
-                                 this);
+                                  stockEditDialogFields(m_config.fields),
+                                  m_storageService,
+                                  {},
+                                  this);
     dialog.setRecordData(record);
     if (dialog.exec() != QDialog::Accepted) {
         return;
@@ -1174,6 +1247,181 @@ void ManagementPage::directUpdateRecord()
     reloadRecords();
 }
 
+void ManagementPage::enrichAllInventoryRecords()
+{
+    if (!isInventoryPage() || m_storageService == nullptr) {
+        return;
+    }
+
+    struct PendingEnrichment {
+        QVariantMap record;
+        InventoryEnrichmentResult result;
+    };
+
+    QList<QVariantMap> allRecords = m_storageService->loadPageRecords(QStringLiteral("inventory"));
+    for (QVariantMap &record : allRecords) {
+        record = normalizeLegacyInventoryFeature(record);
+    }
+    QList<QVariantMap> recordsToEnrich;
+    QStringList skippedRecords;
+    for (const QVariantMap &record : allRecords) {
+        if (record.value(QStringLiteral("manufacturerPart")).toString().trimmed().isEmpty()) {
+            skippedRecords.append(inventoryRecordSummary(record));
+        } else {
+            recordsToEnrich.append(record);
+        }
+    }
+
+    if (recordsToEnrich.isEmpty()) {
+        QMessageBox::information(this,
+                                 QStringLiteral("一键 AI 补齐"),
+                                 QStringLiteral("仓库中没有包含 Manufacturer Part 的元件，无法发起 AI 补齐。"));
+        return;
+    }
+
+    const QStringList fieldKeys = {
+        QStringLiteral("footprint"),
+        QStringLiteral("value"),
+        QStringLiteral("manufacturer"),
+        QStringLiteral("category"),
+        QStringLiteral("precision"),
+        QStringLiteral("feature")
+    };
+    QProgressDialog progress(QStringLiteral("正在请求 AI 补齐信息…"), QString(), 0, recordsToEnrich.size(), this);
+    progress.setWindowTitle(QStringLiteral("一键 AI 补齐"));
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setCancelButton(nullptr);
+    progress.setAutoClose(false);
+    progress.setAutoReset(false);
+    progress.setMinimumDuration(0);
+    progress.show();
+
+    QList<PendingEnrichment> pendingEnrichments;
+    QStringList requestFailures;
+    for (int index = 0; index < recordsToEnrich.size(); ++index) {
+        const QVariantMap &record = recordsToEnrich.at(index);
+        const QString manufacturerPart = record.value(QStringLiteral("manufacturerPart")).toString().trimmed();
+        progress.setLabelText(QStringLiteral("正在请求 %1/%2：%3")
+                                  .arg(index + 1)
+                                  .arg(recordsToEnrich.size())
+                                  .arg(manufacturerPart));
+        QCoreApplication::processEvents();
+
+        InventoryEnrichmentResult result;
+        QString errorMessage;
+        if (m_storageService->enrichInventoryRecord(manufacturerPart,
+                                                    record,
+                                                    fieldKeys,
+                                                    &result,
+                                                    &errorMessage)) {
+            pendingEnrichments.append({record, result});
+        } else {
+            requestFailures.append(QStringLiteral("%1：%2").arg(manufacturerPart, errorMessage));
+        }
+        progress.setValue(index + 1);
+        QCoreApplication::processEvents();
+    }
+    progress.close();
+
+    if (pendingEnrichments.isEmpty()) {
+        QString message = QStringLiteral("%1 个元件的 AI 请求均未获得可用结果。")
+                              .arg(recordsToEnrich.size());
+        if (!skippedRecords.isEmpty()) {
+            message += QStringLiteral("\n另有 %1 条缺少 Manufacturer Part，已跳过。").arg(skippedRecords.size());
+        }
+        if (!requestFailures.isEmpty()) {
+            message += QStringLiteral("\n\n") + requestFailures.join(QStringLiteral("\n"));
+        }
+        QMessageBox::warning(this, QStringLiteral("一键 AI 补齐完成"), message);
+        return;
+    }
+
+    bool accepted = false;
+    const QString mode = QInputDialog::getItem(
+        this,
+        QStringLiteral("应用 AI 补齐结果"),
+        QStringLiteral("%1 个元件的 AI 请求已全部完成。请选择统一写回方式：")
+            .arg(recordsToEnrich.size()),
+        {QStringLiteral("仅补齐空白字段"), QStringLiteral("覆盖所有字段")},
+        0,
+        false,
+        &accepted);
+    if (!accepted) {
+        QString message = QStringLiteral("AI 结果未写回。成功获取 %1 个元件的结果，失败 %2 个。")
+                              .arg(pendingEnrichments.size())
+                              .arg(requestFailures.size());
+        if (!skippedRecords.isEmpty()) {
+            message += QStringLiteral("另有 %1 条缺少 Manufacturer Part，已跳过。").arg(skippedRecords.size());
+        }
+        QMessageBox::information(this, QStringLiteral("一键 AI 补齐"), message);
+        return;
+    }
+
+    const bool overwriteExisting = mode == QStringLiteral("覆盖所有字段");
+    int updatedRecordCount = 0;
+    int appliedFieldCount = 0;
+    QStringList saveFailures;
+    for (const PendingEnrichment &pending : pendingEnrichments) {
+        QVariantMap updatedRecord = pending.record;
+        int recordAppliedFieldCount = 0;
+        for (const InventoryEnrichmentField &field : pending.result.fields) {
+            bool knownField = false;
+            for (const FieldDefinition &definition : m_config.fields) {
+                if (definition.key == field.key) {
+                    knownField = true;
+                    break;
+                }
+            }
+            if (!knownField) {
+                continue;
+            }
+
+            const QString existingValue = updatedRecord.value(field.key).toString().trimmed();
+            const QString aiValue = field.value.trimmed().isEmpty() ? QStringLiteral("-") : field.value.trimmed();
+            if (!overwriteExisting && !existingValue.isEmpty()) {
+                continue;
+            }
+            if (existingValue == aiValue) {
+                continue;
+            }
+            updatedRecord.insert(field.key, aiValue);
+            ++recordAppliedFieldCount;
+        }
+
+        if (recordAppliedFieldCount == 0) {
+            continue;
+        }
+
+        QString errorMessage;
+        if (m_storageService->upsertRecord(QStringLiteral("inventory"), updatedRecord, &errorMessage)) {
+            ++updatedRecordCount;
+            appliedFieldCount += recordAppliedFieldCount;
+        } else {
+            saveFailures.append(QStringLiteral("%1：%2")
+                                    .arg(inventoryRecordSummary(pending.record), errorMessage));
+        }
+    }
+
+    reloadRecords();
+    QString message = QStringLiteral("AI 请求完成 %1/%2 个；已更新 %3 个元件、写入 %4 个字段。")
+                          .arg(pendingEnrichments.size())
+                          .arg(recordsToEnrich.size())
+                          .arg(updatedRecordCount)
+                          .arg(appliedFieldCount);
+    if (!skippedRecords.isEmpty()) {
+        message += QStringLiteral("\n缺少 Manufacturer Part 而跳过：%1 个。").arg(skippedRecords.size());
+    }
+    if (!requestFailures.isEmpty()) {
+        message += QStringLiteral("\nAI 请求失败：%1 个。").arg(requestFailures.size());
+    }
+    if (!saveFailures.isEmpty()) {
+        message += QStringLiteral("\n保存失败：%1 个。\n\n%2")
+                       .arg(saveFailures.size())
+                       .arg(saveFailures.join(QStringLiteral("\n")));
+    }
+    QMessageBox::information(this, QStringLiteral("一键 AI 补齐完成"), message);
+}
+
 void ManagementPage::stockInRecord()
 {
     switch (selectInventoryActionMode(this,
@@ -1194,10 +1442,57 @@ void ManagementPage::stockInRecord()
     }
 }
 
+void ManagementPage::scanStockInRecord()
+{
+    ScanStockInDialog dialog(m_config.fields,
+                             m_storageService->loadPageRecords(QStringLiteral("inventory")),
+                             m_storageService,
+                             this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QString operationNote;
+    if (!promptInventoryOperationNote(this,
+                                      QStringLiteral("填写入库备注"),
+                                      QStringLiteral("确认入库前可填写本次操作备注，留空则不记录备注。"),
+                                      QString(),
+                                      &operationNote)) {
+        return;
+    }
+
+    int successCount = 0;
+    QStringList failures;
+    const QList<ManualStockInEntry> pendingEntries = dialog.entries();
+    for (int index = 0; index < pendingEntries.size(); ++index) {
+        const ManualStockInEntry &entry = pendingEntries.at(index);
+        QString errorMessage;
+        if (m_storageService->applyInventoryChange(entry.itemData,
+                                                   InventoryOperationType::StockIn,
+                                                   InventoryInputType::Scanner,
+                                                   combineInventoryNotes(operationNote, entry.note),
+                                                   QString(),
+                                                   0,
+                                                   &errorMessage)) {
+            ++successCount;
+            continue;
+        }
+        failures.append(QStringLiteral("第 %1 条：%2").arg(index + 1).arg(errorMessage));
+    }
+
+    reloadRecords();
+    QString message = QStringLiteral("成功 %1 条，失败 %2 条。").arg(successCount).arg(failures.size());
+    if (!failures.isEmpty()) {
+        message += QStringLiteral("\n\n") + failures.join(QStringLiteral("\n"));
+    }
+    showImportResultMessage(this, successCount > 0, message);
+}
+
 void ManagementPage::manualStockInRecord()
 {
     ManualStockInDialog dialog(m_config.fields,
                                m_storageService->loadPageRecords(QStringLiteral("inventory")),
+                               m_storageService,
                                this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
@@ -1436,7 +1731,7 @@ void ManagementPage::editRecord()
     QVariantMap data;
     if (isInventoryPage()) {
         InventoryRecordDialog dialog(QStringLiteral("编辑%1").arg(m_config.title),
-                                     m_config.fields,
+                                     stockEditDialogFields(m_config.fields),
                                      m_storageService,
                                      {},
                                      this);

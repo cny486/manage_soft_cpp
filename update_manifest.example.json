@@ -1,0 +1,19 @@
+{
+  "latestVersion": "1.0.1",
+  "minimumSupportedVersion": "1.0.0",
+  "releases": [
+    {
+      "version": "1.0.1",
+      "title": "客户端更新示例",
+      "publishedAt": "2026-06-15",
+      "mandatory": false,
+      "packageFile": "../ManageSoftCpp-update.zip",
+      "sha256": "",
+      "description": [
+        "补充客户端自动更新能力",
+        "登录后自动检查服务端新版本",
+        "支持下载更新包并拉起独立 updater 完成替换"
+      ]
+    }
+  ]
+}

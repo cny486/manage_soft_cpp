@@ -1,10 +1,13 @@
 #include "inventoryrecorddialog.h"
 
+#include "NoWheelSpinBox.h"
+#include "NoWheelDoubleSpinBox.h"
+#include "aiinventoryenricher.h"
+
 #include <QComboBox>
 #include <QDate>
 #include <QDateEdit>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -13,7 +16,6 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QSpinBox>
 #include <QTextBrowser>
 #include <QTextEdit>
 #include <QVBoxLayout>
@@ -30,8 +32,8 @@ QString fieldSourcesToHtml(const InventoryEnrichmentResult &result,
     QString html = QStringLiteral("<h3>AI 补齐来源</h3><ul>");
     for (const InventoryEnrichmentField &field : result.fields) {
         const QString label = labels.value(field.key, field.key);
-        const QString sourceLink = field.sourceUrl.trimmed().isEmpty()
-                                       ? field.sourceTitle.toHtmlEscaped()
+        const QString sourceLink = !AiInventoryEnricher::isSafeSourceUrl(field.sourceUrl)
+                                        ? field.sourceTitle.toHtmlEscaped()
                                        : QStringLiteral("<a href=\"%1\">%2</a>")
                                              .arg(field.sourceUrl.toHtmlEscaped(),
                                                   field.sourceTitle.toHtmlEscaped());
@@ -184,12 +186,12 @@ QWidget *InventoryRecordDialog::createEditor(const FieldDefinition &field)
 {
     switch (field.type) {
     case FieldType::Integer: {
-        auto *editor = new QSpinBox(this);
+        auto *editor = new NoWheelSpinBox(this);
         editor->setRange(0, 1000000000);
         return editor;
     }
     case FieldType::Double: {
-        auto *editor = new QDoubleSpinBox(this);
+        auto *editor = new NoWheelDoubleSpinBox(this);
         editor->setRange(-1000000000.0, 1000000000.0);
         editor->setDecimals(2);
         return editor;

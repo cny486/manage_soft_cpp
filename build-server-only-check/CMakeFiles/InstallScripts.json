@@ -1,9 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"D:/work/manage_soft_cpp/build-server-only-check/cmake_install.cmake",
-		"D:/work/manage_soft_cpp/build-server-only-check/src/shared/cmake_install.cmake",
-		"D:/work/manage_soft_cpp/build-server-only-check/src/server/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

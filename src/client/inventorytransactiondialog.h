@@ -21,6 +21,7 @@ public:
                                QWidget *parent = nullptr);
 
     int quantity() const;
+    void setQuantity(int quantity);
     QString transactionDate() const;
     QString note() const;
 

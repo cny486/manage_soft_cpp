@@ -59,6 +59,7 @@ public:
                                                         const QString &note = QString(),
                             QString *errorMessage = nullptr) const override;
     bool analyzeInventoryFulfillment(const QString &filePath,
+                                     int fulfillmentSetCount,
                                      QList<InventoryFulfillmentResult> *results,
                                      QString *errorMessage = nullptr) const override;
     bool enrichInventoryRecord(const QString &manufacturerPart,
@@ -66,7 +67,21 @@ public:
                                const QStringList &desiredFieldKeys,
                                InventoryEnrichmentResult *result,
                                QString *errorMessage = nullptr) const override;
+    bool importDemandList(const QString &name,
+                          const QString &filePath,
+                          QString *errorMessage = nullptr) const override;
+    bool exportDemandList(const QString &recordId,
+                          const QString &filePath,
+                          QString *errorMessage = nullptr) const override;
+    bool loadDemandListItems(const QString &recordId,
+                             QList<DemandListItem> *items,
+                             QString *errorMessage = nullptr) const override;
+    bool analyzeDemandListFulfillment(const QString &recordId,
+                                      int buildCount,
+                                      QList<InventoryFulfillmentResult> *results,
+                                      QString *errorMessage = nullptr) const override;
     bool exportInventoryFulfillment(const QList<InventoryFulfillmentResult> &results,
+                                    const QString &sourceFilePath,
                                     const QString &filePath,
                                     QString *errorMessage = nullptr) const override;
     bool applyInventoryFulfillment(const QList<InventoryFulfillmentResult> &results,
@@ -88,6 +103,7 @@ private:
     QString attachmentsRootDirectory() const;
     QString recordAttachmentRelativeDirectory(const QString &pageId, const QString &recordId) const;
     QString recordAttachmentDirectory(const QString &pageId, const QString &recordId) const;
+    QString demandListArchivedFilePath(const QVariantMap &record) const;
     QString inventoryHistoryFilePath() const;
     bool ensureStorageReady(QString *errorMessage = nullptr) const;
     bool ensureUserStoreReady(QString *errorMessage = nullptr) const;
@@ -101,6 +117,7 @@ private:
                                         QStringList *obsoleteFiles,
                                         QStringList *createdFiles,
                                         QString *errorMessage = nullptr) const;
+    bool removeDemandListArchive(const QVariantMap &record) const;
     bool savePageRecords(const QString &pageId,
                          const QList<QVariantMap> &records,
                          QString *errorMessage = nullptr) const;

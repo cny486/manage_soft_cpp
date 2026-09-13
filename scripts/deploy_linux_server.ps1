@@ -17,6 +17,8 @@ param(
     [string]$ApiKey = '',
     [string]$ApiModel = '',
     [int]$ApiTimeoutMs = 30000,
+    [string]$ClientUpdatePackage = '',
+    [string]$ClientUpdateManifest = '',
     [switch]$SkipSystemd
 )
 
@@ -52,6 +54,14 @@ if (-not [string]::IsNullOrWhiteSpace($ApiKey)) {
 
 if (-not [string]::IsNullOrWhiteSpace($ApiModel)) {
     $arguments += @('--api-model', $ApiModel)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ClientUpdatePackage)) {
+    $arguments += @('--client-update-package', $ClientUpdatePackage)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ClientUpdateManifest)) {
+    $arguments += @('--client-update-manifest', $ClientUpdateManifest)
 }
 
 if ($Password) {

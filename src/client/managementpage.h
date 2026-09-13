@@ -13,6 +13,7 @@ class QLineEdit;
 class QPushButton;
 class QComboBox;
 class QTableWidget;
+class SearchHighlightDelegate;
 
 class ManagementPage : public QWidget {
 public:
@@ -39,7 +40,9 @@ private:
     void showInventoryContextMenu(const QPoint &position);
     void viewInventoryHistory(const QString &inputTypeFilter = QString());
     void directUpdateRecord();
+    void enrichAllInventoryRecords();
     void stockInRecord();
+    void scanStockInRecord();
     void manualStockInRecord();
     void excelStockInRecord();
     void fulfillDemandRecord();
@@ -67,6 +70,7 @@ private:
     QComboBox *m_invoiceStatusFilterCombo = nullptr;
     QComboBox *m_reimbursedStatusFilterCombo = nullptr;
     QTableWidget *m_table = nullptr;
+    SearchHighlightDelegate *m_highlightDelegate = nullptr;
     QLabel *m_statusLabel = nullptr;
     QList<QVariantMap> m_visibleRecords;
 };

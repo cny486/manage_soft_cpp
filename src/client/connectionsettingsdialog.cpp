@@ -1,6 +1,8 @@
 #include "connectionsettingsdialog.h"
 
 #include "aiapisettings.h"
+#include "aiinventoryenricher.h"
+#include "appservice.h"
 #include "emailsettings.h"
 #include "tcpappserviceclient.h"
 
@@ -16,9 +18,11 @@
 #include <QVBoxLayout>
 
 ConnectionSettingsDialog::ConnectionSettingsDialog(const ConnectionSettings &settings,
+                                                   AppService *service,
                                                    QWidget *parent)
         : QDialog(parent),
-            m_loadedEmailSettings(loadEmailSettings())
+            m_loadedEmailSettings(loadEmailSettings()),
+            m_service(service)
 {
     setWindowTitle(QStringLiteral("连接设置"));
         resize(560, 420);
@@ -70,7 +74,7 @@ ConnectionSettingsDialog::ConnectionSettingsDialog(const ConnectionSettings &set
     connectionCardLayout->addWidget(m_localStorageCheck);
     connectionCardLayout->addLayout(formLayout);
 
-    auto *aiTitleLabel = new QLabel(QStringLiteral("AI 补齐设置"), this);
+    auto *aiTitleLabel = new QLabel(QStringLiteral("AI 补齐设置（仅本地模式）"), this);
     aiTitleLabel->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 800; color: #173137;"));
 
     m_aiApiUrlEdit = new QLineEdit(aiSettings.apiUrl, this);
@@ -82,6 +86,11 @@ ConnectionSettingsDialog::ConnectionSettingsDialog(const ConnectionSettings &set
     m_aiTimeoutSpin->setSingleStep(1000);
     m_aiTimeoutSpin->setSuffix(QStringLiteral(" ms"));
     m_aiTimeoutSpin->setValue(aiSettings.timeoutMs);
+    const QString remoteAiHint = QStringLiteral("远程模式下，AI API 地址、密钥和模型由服务器进程配置；客户端不会传输密钥。");
+    m_aiApiUrlEdit->setToolTip(remoteAiHint);
+    m_aiApiKeyEdit->setToolTip(remoteAiHint);
+    m_aiModelEdit->setToolTip(remoteAiHint);
+    m_aiTimeoutSpin->setToolTip(remoteAiHint);
 
     auto *aiFormLayout = new QFormLayout();
     aiFormLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -177,7 +186,14 @@ void ConnectionSettingsDialog::updateFieldState()
     m_serverPortSpin->setEnabled(!useLocalStorage);
     m_timeoutSpin->setEnabled(!useLocalStorage);
     m_testButton->setEnabled(!useLocalStorage);
-    m_testAiButton->setEnabled(!useLocalStorage);
+    m_aiApiUrlEdit->setEnabled(useLocalStorage);
+    m_aiApiKeyEdit->setEnabled(useLocalStorage);
+    m_aiModelEdit->setEnabled(useLocalStorage);
+    m_aiTimeoutSpin->setEnabled(useLocalStorage);
+    m_testAiButton->setEnabled(useLocalStorage || dynamic_cast<TcpAppServiceClient *>(m_service) != nullptr);
+    m_testAiButton->setToolTip(useLocalStorage
+                                    ? QStringLiteral("使用本机保存的 AI 配置发起测试。")
+                                    : QStringLiteral("使用当前已登录服务器上的 AI 配置发起测试。"));
 }
 
 void ConnectionSettingsDialog::testConnection()
@@ -214,38 +230,31 @@ void ConnectionSettingsDialog::testConnection()
 
 void ConnectionSettingsDialog::testAiConnection()
 {
-    if (m_localStorageCheck->isChecked()) {
-        QMessageBox::warning(this,
-                             QStringLiteral("当前不可测试"),
-                             QStringLiteral("AI 测试已改为通过后端发起，请先关闭本地文件存储并填写服务器连接信息。"));
-        return;
-    }
-
-    const QString host = m_serverHostEdit->text().trimmed();
-    if (host.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("参数不完整"), QStringLiteral("请先填写服务器地址。"));
-        return;
-    }
-
     const AiApiSettings currentAiSettings = aiSettings();
-    if (currentAiSettings.apiUrl.trimmed().isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("参数不完整"), QStringLiteral("请先填写 AI API 地址。"));
-        return;
-    }
-    if (currentAiSettings.model.trimmed().isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("参数不完整"), QStringLiteral("请先填写 AI 模型。"));
-        return;
-    }
-
-    TcpAppServiceClient client(host,
-                               static_cast<quint16>(m_serverPortSpin->value()),
-                               m_timeoutSpin->value());
     QString responsePreview;
     QString errorMessage;
-    if (!client.testAiConnection(currentAiSettings, &responsePreview, &errorMessage)) {
+    bool success = false;
+    if (m_localStorageCheck->isChecked()) {
+        if (currentAiSettings.apiUrl.trimmed().isEmpty() || currentAiSettings.model.trimmed().isEmpty()) {
+            QMessageBox::warning(this, QStringLiteral("参数不完整"), QStringLiteral("请先填写 AI API 地址和模型。"));
+            return;
+        }
+        success = AiInventoryEnricher::testConnection(currentAiSettings, &responsePreview, &errorMessage);
+    } else {
+        auto *client = dynamic_cast<TcpAppServiceClient *>(m_service);
+        if (client == nullptr || client->currentUserName().trimmed().isEmpty()) {
+            QMessageBox::warning(this,
+                                 QStringLiteral("当前不可测试"),
+                                 QStringLiteral("请先登录目标服务器；远程模式下 AI 配置由服务器进程管理。"));
+            return;
+        }
+        success = client->testAiConnection(&responsePreview, &errorMessage);
+    }
+
+    if (!success) {
         QMessageBox::critical(this,
                               QStringLiteral("AI 连接失败"),
-                              QStringLiteral("后端发起 AI 测试失败：%1").arg(errorMessage));
+                              QStringLiteral("AI 测试失败：%1").arg(errorMessage));
         return;
     }
 

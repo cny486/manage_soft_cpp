@@ -1,8 +1,11 @@
 #include "mainwindow.h"
 
 #include "accountsecuritydialog.h"
+#include "appversion.h"
 #include "appservice.h"
 #include "appschema.h"
+#include "demandlibrarydetailpage.h"
+#include "demandlibraryoverviewpage.h"
 #include "managementpage.h"
 #include "reimbursementoverviewpage.h"
 
@@ -34,6 +37,8 @@ PageConfig inventoryConfig()
             {QStringLiteral("designator"), QStringLiteral("Designator"), FieldType::Text, false, {}},
             {QStringLiteral("footprint"), QStringLiteral("Footprint"), FieldType::Text, false, {}},
             {QStringLiteral("value"), QStringLiteral("Value"), FieldType::Text, false, {}},
+            {QStringLiteral("precision"), QStringLiteral("精度"), FieldType::Text, false, {}},
+            {QStringLiteral("feature"), QStringLiteral("特征值"), FieldType::Text, false, {}},
             {QStringLiteral("manufacturerPart"), QStringLiteral("Manufacturer Part"), FieldType::Text, true, {}},
             {QStringLiteral("manufacturer"), QStringLiteral("Manufacturer"), FieldType::Text, false, {}},
             {QStringLiteral("addIntoBom"), QStringLiteral("Add into BOM"), FieldType::Text, false, {}},
@@ -64,6 +69,10 @@ PageConfig inventoryConfig()
             QStringLiteral("location"),
             QStringLiteral("date"),
             QStringLiteral("category"),
+            QStringLiteral("value"),
+            QStringLiteral("footprint"),
+            QStringLiteral("precision"),
+            QStringLiteral("feature"),
             QStringLiteral("device"),
             QStringLiteral("comment"),
             QStringLiteral("designator")
@@ -72,6 +81,11 @@ PageConfig inventoryConfig()
             QStringLiteral("manufacturerPart"),
             QStringLiteral("quantity"),
             QStringLiteral("category"),
+            QStringLiteral("value"),
+            QStringLiteral("footprint"),
+            QStringLiteral("precision"),
+            QStringLiteral("feature"),
+            QStringLiteral("supplier"),
             QStringLiteral("date"),
             QStringLiteral("location")
         },
@@ -134,13 +148,18 @@ MainWindow::MainWindow(AppService *storageService,
     applyTheme();
     buildUi();
     resize(1180, 720);
-    setWindowTitle(QStringLiteral("管理软件原型"));
+    setWindowTitle(QStringLiteral("管理软件原型 v%1").arg(AppVersion::clientVersion()));
     statusBar()->showMessage(m_statusMessage);
 }
 
 MainWindow::~MainWindow()
 {
     delete m_storageService;
+}
+
+AppService *MainWindow::storageService() const
+{
+    return m_storageService;
 }
 
 void MainWindow::applyTheme()
@@ -242,18 +261,23 @@ void MainWindow::buildUi()
     auto *navigationSectionLabel = new QLabel(QStringLiteral("业务模块"), navigationFrame);
     navigationSectionLabel->setStyleSheet(QStringLiteral("font-size: 12px; font-weight: 700; color: #7a9195; padding-top: 10px;"));
     m_inventoryButton = new QPushButton(QStringLiteral("库存管理"), navigationFrame);
+    m_demandLibraryButton = new QPushButton(QStringLiteral("清单库"), navigationFrame);
     m_reimbursementButton = new QPushButton(QStringLiteral("报账管理"), navigationFrame);
     m_inventoryButton->setProperty("variant", QStringLiteral("nav"));
+    m_demandLibraryButton->setProperty("variant", QStringLiteral("nav"));
     m_reimbursementButton->setProperty("variant", QStringLiteral("nav"));
     m_inventoryButton->setCheckable(true);
+    m_demandLibraryButton->setCheckable(true);
     m_reimbursementButton->setCheckable(true);
     m_inventoryButton->setMinimumHeight(54);
+    m_demandLibraryButton->setMinimumHeight(54);
     m_reimbursementButton->setMinimumHeight(54);
 
     navigationLayout->addWidget(brandLabel);
     navigationLayout->addSpacing(18);
     navigationLayout->addWidget(navigationSectionLabel);
     navigationLayout->addWidget(m_inventoryButton);
+    navigationLayout->addWidget(m_demandLibraryButton);
     navigationLayout->addWidget(m_reimbursementButton);
     navigationLayout->addStretch();
 
@@ -292,9 +316,32 @@ void MainWindow::buildUi()
     reimbursementTabsLayout->addWidget(m_reimbursementOverviewTabButton);
     reimbursementTabsLayout->addWidget(m_reimbursementDetailTabButton);
 
+    m_demandLibraryTabsWidget = new QFrame(headerFrame);
+    m_demandLibraryTabsWidget->setStyleSheet(QStringLiteral(
+        "background-color: #f2f8f8; border: 1px solid #d8e6e7; border-radius: 16px;"));
+    auto *demandTabsLayout = new QHBoxLayout(m_demandLibraryTabsWidget);
+    demandTabsLayout->setContentsMargins(6, 6, 6, 6);
+    demandTabsLayout->setSpacing(6);
+
+    m_demandLibraryOverviewTabButton = new QPushButton(QStringLiteral("清单首页"), m_demandLibraryTabsWidget);
+    m_demandLibraryDetailTabButton = new QPushButton(QStringLiteral("清单详情"), m_demandLibraryTabsWidget);
+    m_demandLibraryOverviewTabButton->setProperty("variant", QStringLiteral("tab"));
+    m_demandLibraryDetailTabButton->setProperty("variant", QStringLiteral("tab"));
+    m_demandLibraryOverviewTabButton->setCheckable(true);
+    m_demandLibraryDetailTabButton->setCheckable(true);
+    m_demandLibraryDetailTabButton->setEnabled(false);
+    demandTabsLayout->addWidget(m_demandLibraryOverviewTabButton);
+    demandTabsLayout->addWidget(m_demandLibraryDetailTabButton);
+
     auto *dateLabel = new QLabel(QDate::currentDate().toString(QStringLiteral("yyyy.MM.dd")), headerFrame);
     dateLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     dateLabel->setStyleSheet(QStringLiteral(
+        "font-size: 13px; color: #587277; font-weight: 700;"
+        "background-color: #f2f8f8; border: 1px solid #d8e6e7; border-radius: 14px; padding: 10px 14px;"));
+
+    auto *versionLabel = new QLabel(QStringLiteral("v%1").arg(AppVersion::clientVersion()), headerFrame);
+    versionLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    versionLabel->setStyleSheet(QStringLiteral(
         "font-size: 13px; color: #587277; font-weight: 700;"
         "background-color: #f2f8f8; border: 1px solid #d8e6e7; border-radius: 14px; padding: 10px 14px;"));
 
@@ -318,21 +365,48 @@ void MainWindow::buildUi()
     });
 
     headerLayout->addLayout(headerTextLayout, 1);
+    headerLayout->addWidget(m_demandLibraryTabsWidget);
     headerLayout->addWidget(m_reimbursementTabsWidget);
     headerLayout->addWidget(accountSecurityButton);
     headerLayout->addWidget(settingsButton);
+    headerLayout->addWidget(versionLabel);
     headerLayout->addWidget(dateLabel);
 
     m_stack = new QStackedWidget(contentWidget);
     m_stack->setStyleSheet(QStringLiteral("QStackedWidget { background-color: transparent; }"));
     m_inventoryPage = new ManagementPage(inventoryConfig(), m_storageService, m_stack);
+    m_demandLibraryOverviewPage = new DemandLibraryOverviewPage(
+        m_storageService,
+        [this](const QVariantMap &record) {
+            if (m_demandLibraryDetailPage != nullptr) {
+                m_demandLibraryDetailPage->setRecord(record);
+            }
+            if (m_demandLibraryDetailTabButton != nullptr) {
+                m_demandLibraryDetailTabButton->setEnabled(true);
+            }
+            setCurrentPage(4);
+        },
+        m_stack);
+    m_demandLibraryDetailPage = new DemandLibraryDetailPage(
+        m_storageService,
+        [this]() { setCurrentPage(3); },
+        m_stack);
     m_reimbursementOverviewPage = new ReimbursementOverviewPage(m_storageService, m_stack);
     m_reimbursementDetailPage = new ManagementPage(reimbursementConfig(), m_storageService, m_stack);
     m_stack->addWidget(m_inventoryPage);
     m_stack->addWidget(m_reimbursementOverviewPage);
     m_stack->addWidget(m_reimbursementDetailPage);
+    m_stack->addWidget(m_demandLibraryOverviewPage);
+    m_stack->addWidget(m_demandLibraryDetailPage);
 
     connect(m_inventoryButton, &QPushButton::clicked, this, [this]() { setCurrentPage(0); });
+    connect(m_demandLibraryButton, &QPushButton::clicked, this, [this]() { setCurrentPage(3); });
+    connect(m_demandLibraryOverviewTabButton, &QPushButton::clicked, this, [this]() { setCurrentPage(3); });
+    connect(m_demandLibraryDetailTabButton, &QPushButton::clicked, this, [this]() {
+        if (m_demandLibraryDetailTabButton != nullptr && m_demandLibraryDetailTabButton->isEnabled()) {
+            setCurrentPage(4);
+        }
+    });
     connect(m_reimbursementButton, &QPushButton::clicked, this, [this]() { setCurrentPage(1); });
     connect(m_reimbursementOverviewTabButton, &QPushButton::clicked, this, [this]() { setCurrentPage(1); });
     connect(m_reimbursementDetailTabButton, &QPushButton::clicked, this, [this]() { setCurrentPage(2); });
@@ -356,6 +430,10 @@ void MainWindow::setCurrentPage(int index)
         m_reimbursementOverviewPage->reloadData();
     } else if (index == 2 && m_reimbursementDetailPage != nullptr) {
         m_reimbursementDetailPage->reloadRecords();
+    } else if (index == 3 && m_demandLibraryOverviewPage != nullptr) {
+        m_demandLibraryOverviewPage->reloadData();
+    } else if (index == 4 && m_demandLibraryDetailPage != nullptr) {
+        m_demandLibraryDetailPage->reloadData();
     }
 
     updateNavigationState();
@@ -365,32 +443,53 @@ void MainWindow::setCurrentPage(int index)
         return;
     }
 
-    if (index == 1) {
+    if (index == 3 || index == 4) {
+        m_pageTitleLabel->setText(QStringLiteral("清单库"));
+        return;
+    }
+
+    if (index == 1 || index == 2) {
         m_pageTitleLabel->setText(QStringLiteral("报账管理"));
         return;
     }
 
-    m_pageTitleLabel->setText(QStringLiteral("报账管理"));
+    m_pageTitleLabel->setText(QStringLiteral("管理中心"));
 }
 
 void MainWindow::updateNavigationState()
 {
     const int currentIndex = m_stack->currentIndex();
     const bool inventoryActive = currentIndex == 0;
+    const bool demandLibraryActive = currentIndex == 3 || currentIndex == 4;
     const bool reimbursementActive = currentIndex == 1 || currentIndex == 2;
+    const bool demandLibraryOverviewActive = currentIndex == 3;
+    const bool demandLibraryDetailActive = currentIndex == 4;
     const bool reimbursementOverviewActive = currentIndex == 1;
     const bool reimbursementDetailActive = currentIndex == 2;
     m_inventoryButton->setChecked(inventoryActive);
+    m_demandLibraryButton->setChecked(demandLibraryActive);
     m_reimbursementButton->setChecked(reimbursementActive);
+    m_demandLibraryOverviewTabButton->setChecked(demandLibraryOverviewActive);
+    m_demandLibraryDetailTabButton->setChecked(demandLibraryDetailActive);
     m_reimbursementOverviewTabButton->setChecked(reimbursementOverviewActive);
     m_reimbursementDetailTabButton->setChecked(reimbursementDetailActive);
     m_inventoryButton->setProperty("active", inventoryActive);
+    m_demandLibraryButton->setProperty("active", demandLibraryActive);
     m_reimbursementButton->setProperty("active", reimbursementActive);
+    m_demandLibraryOverviewTabButton->setProperty("active", demandLibraryOverviewActive);
+    m_demandLibraryDetailTabButton->setProperty("active", demandLibraryDetailActive);
     m_reimbursementOverviewTabButton->setProperty("active", reimbursementOverviewActive);
     m_reimbursementDetailTabButton->setProperty("active", reimbursementDetailActive);
+    m_demandLibraryTabsWidget->setVisible(demandLibraryActive);
     m_reimbursementTabsWidget->setVisible(reimbursementActive);
 
-    for (QPushButton *button : {m_inventoryButton, m_reimbursementButton, m_reimbursementOverviewTabButton, m_reimbursementDetailTabButton}) {
+    for (QPushButton *button : {m_inventoryButton,
+                                m_demandLibraryButton,
+                                m_reimbursementButton,
+                                m_demandLibraryOverviewTabButton,
+                                m_demandLibraryDetailTabButton,
+                                m_reimbursementOverviewTabButton,
+                                m_reimbursementDetailTabButton}) {
         style()->unpolish(button);
         style()->polish(button);
         button->update();

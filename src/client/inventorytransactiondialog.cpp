@@ -95,6 +95,11 @@ int InventoryTransactionDialog::quantity() const
     return m_quantitySpinBox->value();
 }
 
+void InventoryTransactionDialog::setQuantity(int quantity)
+{
+    m_quantitySpinBox->setValue(qMax(1, quantity));
+}
+
 QString InventoryTransactionDialog::transactionDate() const
 {
     return m_dateEdit->date().toString(Qt::ISODate);

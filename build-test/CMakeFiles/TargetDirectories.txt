@@ -1,5 +1,0 @@
-D:/work/manage_soft_cpp/build-test/CMakeFiles/ManageSoftCpp.dir
-D:/work/manage_soft_cpp/build-test/CMakeFiles/edit_cache.dir
-D:/work/manage_soft_cpp/build-test/CMakeFiles/rebuild_cache.dir
-D:/work/manage_soft_cpp/build-test/CMakeFiles/ManageSoftCpp_autogen_timestamp_deps.dir
-D:/work/manage_soft_cpp/build-test/CMakeFiles/ManageSoftCpp_autogen.dir

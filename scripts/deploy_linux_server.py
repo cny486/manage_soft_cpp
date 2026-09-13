@@ -38,6 +38,10 @@ EXCLUDED_FILE_SUFFIXES = {
     '.user',
 }
 
+EXCLUDED_FILE_PREFIXES = {
+    '~$',
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Deploy ManageSoftServer to a Linux host over SSH.')
@@ -54,6 +58,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--api-key', default='', help='Optional MANAGE_SOFT_AI_API_KEY value.')
     parser.add_argument('--api-model', default='', help='Optional MANAGE_SOFT_AI_MODEL value.')
     parser.add_argument('--api-timeout-ms', type=int, default=30000, help='MANAGE_SOFT_AI_TIMEOUT_MS value.')
+    parser.add_argument('--client-update-package', default='', help='Optional local Windows client update zip to publish alongside the server.')
+    parser.add_argument('--client-update-manifest', default='', help='Optional local update_manifest.json to publish alongside the server.')
+    parser.add_argument('--backup-data', action='store_true', help='Backup the server data directory before restart.')
+    parser.add_argument('--data-root', default='', help='Remote server data directory. Defaults to the Qt AppDataLocation path.')
+    parser.add_argument('--backup-root', default='~/manage_soft_backups', help='Remote directory used to store data backups.')
     parser.add_argument('--skip-systemd', action='store_true', help='Only upload and build, do not install or restart systemd service.')
     return parser.parse_args()
 
@@ -74,6 +83,8 @@ def should_skip_file(relative_file: Path) -> bool:
     if parts[0] in EXCLUDED_TOP_LEVEL:
         return True
     if any(part in EXCLUDED_DIR_NAMES for part in parts[:-1]):
+        return True
+    if any(relative_file.name.startswith(prefix) for prefix in EXCLUDED_FILE_PREFIXES):
         return True
     return relative_file.suffix.lower() in EXCLUDED_FILE_SUFFIXES
 
@@ -110,6 +121,12 @@ def resolve_remote_root(home_dir: str, remote_root: str) -> str:
     if remote_root.startswith('~/'):
         return posixpath.join(home_dir, remote_root[2:])
     return remote_root
+
+
+def resolve_remote_data_root(home_dir: str, data_root: str) -> str:
+    if data_root:
+        return resolve_remote_root(home_dir, data_root)
+    return posixpath.join(home_dir, '.local', 'share', 'ManageSoftCpp', 'ManageSoftServer', 'data')
 
 
 def quote_remote(value: str) -> str:
@@ -166,7 +183,17 @@ class RemoteSession:
             sftp.put(str(local_path), remote_path)
 
 
-def build_unit_file(args: argparse.Namespace, remote_root: str) -> str:
+def preserved_ai_environment_lines(existing_unit: str) -> dict[str, str]:
+    preserved: dict[str, str] = {}
+    for line in existing_unit.splitlines():
+        stripped = line.strip()
+        for variable in ('MANAGE_SOFT_AI_API_URL', 'MANAGE_SOFT_AI_API_KEY', 'MANAGE_SOFT_AI_MODEL'):
+            if variable in stripped and stripped.startswith('Environment='):
+                preserved[variable] = stripped
+    return preserved
+
+
+def build_unit_file(args: argparse.Namespace, remote_root: str, existing_unit: str = '') -> str:
     run_dir = posixpath.join(remote_root, 'run')
     env_lines = [
         f'Environment="MANAGE_SOFT_SERVER_LISTEN_HOST={escape_systemd_value(args.listen_host)}"',
@@ -180,6 +207,16 @@ def build_unit_file(args: argparse.Namespace, remote_root: str) -> str:
         env_lines.append(f'Environment="MANAGE_SOFT_AI_API_KEY={escape_systemd_value(args.api_key)}"')
     if args.api_model:
         env_lines.append(f'Environment="MANAGE_SOFT_AI_MODEL={escape_systemd_value(args.api_model)}"')
+
+    preserved_lines = preserved_ai_environment_lines(existing_unit)
+    configured_values = {
+        'MANAGE_SOFT_AI_API_URL': args.api_url,
+        'MANAGE_SOFT_AI_API_KEY': args.api_key,
+        'MANAGE_SOFT_AI_MODEL': args.api_model,
+    }
+    for variable, configured_value in configured_values.items():
+        if not configured_value and variable in preserved_lines:
+            env_lines.append(preserved_lines[variable])
 
     env_block = '\n'.join(env_lines)
 
@@ -212,8 +249,18 @@ def write_temp_file(content: str, suffix: str) -> Path:
 
 def main() -> int:
     args = parse_args()
+    if bool(args.client_update_package) != bool(args.client_update_manifest):
+        raise SystemExit('Both --client-update-package and --client-update-manifest must be provided together.')
+
     password = args.password or getpass.getpass(f'SSH password for {args.username}@{args.host}: ')
     repo_root = Path(__file__).resolve().parent.parent
+    client_update_package = Path(args.client_update_package).expanduser().resolve() if args.client_update_package else None
+    client_update_manifest = Path(args.client_update_manifest).expanduser().resolve() if args.client_update_manifest else None
+
+    if client_update_package and not client_update_package.is_file():
+        raise SystemExit(f'Client update package not found: {client_update_package}')
+    if client_update_manifest and not client_update_manifest.is_file():
+        raise SystemExit(f'Client update manifest not found: {client_update_manifest}')
 
     print('==> Packaging source archive')
     archive_path = create_source_archive(repo_root)
@@ -222,6 +269,8 @@ def main() -> int:
     try:
         home_dir = session.run('printf %s "$HOME"')
         remote_root = resolve_remote_root(home_dir, args.remote_root)
+        remote_data_root = resolve_remote_data_root(home_dir, args.data_root)
+        remote_backup_root = resolve_remote_root(home_dir, args.backup_root)
         remote_archive = posixpath.join(remote_root, 'manage_soft_cpp_linux_src.tar.gz')
         remote_source_dir = posixpath.join(remote_root, 'src')
         remote_build_dir = posixpath.join(remote_root, 'build')
@@ -269,9 +318,26 @@ def main() -> int:
             f"install -m 755 {quote_remote(posixpath.join(remote_build_dir, 'src/server/ManageSoftServer'))} {quote_remote(remote_binary)}"
         )
 
+        backup_archive = ''
+        if args.backup_data:
+            print('==> Backing up server data directory')
+            backup_archive = session.run(
+                f"mkdir -p {quote_remote(remote_backup_root)} && "
+                f"if [ -d {quote_remote(remote_data_root)} ]; then "
+                f"archive={quote_remote(remote_backup_root)}/manage_soft_data_$(date +%Y%m%d_%H%M%S).tar.gz; "
+                f"tar -czf \"$archive\" -C {quote_remote(posixpath.dirname(remote_data_root))} {quote_remote(posixpath.basename(remote_data_root))}; "
+                f"printf %s \"$archive\"; "
+                f"else printf %s ''; fi"
+            )
+            if backup_archive:
+                print(f'Backup archive: {backup_archive}')
+            else:
+                print(f'No data directory found at {remote_data_root}, skipped backup')
+
         if not args.skip_systemd:
             print('==> Installing systemd service')
-            unit_file_content = build_unit_file(args, remote_root)
+            existing_unit = session.run(f"cat {quote_remote(unit_file_path)}", sudo=True, check=False)
+            unit_file_content = build_unit_file(args, remote_root, existing_unit)
             local_unit_file = write_temp_file(unit_file_content, '.service')
             session.upload_file(local_unit_file, remote_unit_temp)
             print('==> Stopping existing ManageSoftServer processes')
@@ -311,6 +377,15 @@ def main() -> int:
         else:
             print('==> Skipped systemd install/restart')
 
+        if client_update_package and client_update_manifest:
+            remote_update_package = posixpath.join(remote_run_dir, client_update_package.name)
+            remote_update_manifest = posixpath.join(remote_run_dir, 'update_manifest.json')
+            print('==> Publishing client update artifacts')
+            session.upload_file(client_update_package, remote_update_package)
+            session.upload_file(client_update_manifest, remote_update_manifest)
+            print(f'Client update package  : {remote_update_package}')
+            print(f'Client update manifest : {remote_update_manifest}')
+
         print('==> Cleaning remote source and build artifacts')
         session.run(
             f"find {quote_remote(remote_root)} -mindepth 1 -maxdepth 1 ! -name run -exec rm -rf {{}} +"
@@ -325,6 +400,9 @@ def main() -> int:
         print('==> Deployment completed')
         print(f'Remote root   : {remote_root}')
         print(f'Server binary : {remote_binary}')
+        print(f'Data root     : {remote_data_root}')
+        if backup_archive:
+            print(f'Data backup   : {backup_archive}')
         if not args.skip_systemd:
             print(f'Service name  : {args.service_name}')
 

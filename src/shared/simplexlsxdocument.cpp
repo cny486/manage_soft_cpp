@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QList>
 #include <QMap>
+#include <QSet>
 #include <QStringList>
 #include <QVariant>
 #include <QXmlStreamReader>
@@ -328,37 +329,132 @@ bool writeZipArchive(const QString &filePath,
     return true;
 }
 
-QString sheetXml(const QStringList &headers, const QList<QList<QVariant>> &rows)
+QString cellFormatKey(const XlsxCellFormat &format)
+{
+    return format.fillColor.trimmed().toUpper()
+           + QChar('|')
+           + format.fontColor.trimmed().toUpper()
+           + QChar('|')
+           + (format.bold ? QStringLiteral("1") : QStringLiteral("0"));
+}
+
+QString colorValue(QString color)
+{
+    color = color.trimmed();
+    if (color.startsWith(QChar('#'))) {
+        color.remove(0, 1);
+    }
+    return color.toUpper();
+}
+
+QList<XlsxCellFormat> workbookFormats(const QList<XlsxWorkbookSheet> &sheets)
+{
+    QList<XlsxCellFormat> formats;
+    QSet<QString> formatKeys;
+    for (const XlsxWorkbookSheet &sheet : sheets) {
+        for (auto it = sheet.cellFormats.constBegin(); it != sheet.cellFormats.constEnd(); ++it) {
+            const QString key = cellFormatKey(it.value());
+            if (!formatKeys.contains(key)) {
+                formatKeys.insert(key);
+                formats.append(it.value());
+            }
+        }
+    }
+    return formats;
+}
+
+QHash<QString, int> styleIndexes(const QList<XlsxCellFormat> &formats)
+{
+    QHash<QString, int> indexes;
+    for (int index = 0; index < formats.size(); ++index) {
+        indexes.insert(cellFormatKey(formats.at(index)), index + 1);
+    }
+    return indexes;
+}
+
+QString stylesXml(const QList<XlsxCellFormat> &formats)
+{
+    QString xml = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+
+    xml += QStringLiteral("<fonts count=\"") + QString::number(formats.size() + 1) + QStringLiteral("\">");
+    xml += QStringLiteral("<font><sz val=\"11\"/><color theme=\"1\"/><name val=\"Calibri\"/><family val=\"2\"/></font>");
+    for (const XlsxCellFormat &format : formats) {
+        xml += QStringLiteral("<font><sz val=\"11\"/>");
+        if (format.bold) {
+            xml += QStringLiteral("<b/>");
+        }
+        if (!format.fontColor.trimmed().isEmpty()) {
+            xml += QStringLiteral("<color rgb=\"FF") + colorValue(format.fontColor) + QStringLiteral("\"/>");
+        } else {
+            xml += QStringLiteral("<color theme=\"1\"/>");
+        }
+        xml += QStringLiteral("<name val=\"Calibri\"/><family val=\"2\"/></font>");
+    }
+    xml += QStringLiteral("</fonts>");
+
+    xml += QStringLiteral("<fills count=\"") + QString::number(formats.size() + 2) + QStringLiteral("\">");
+    xml += QStringLiteral("<fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill>");
+    for (const XlsxCellFormat &format : formats) {
+        xml += QStringLiteral("<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF")
+               + colorValue(format.fillColor)
+               + QStringLiteral("\"/><bgColor indexed=\"64\"/></patternFill></fill>");
+    }
+    xml += QStringLiteral("</fills>");
+    xml += QStringLiteral("<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>");
+    xml += QStringLiteral("<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>");
+    xml += QStringLiteral("<cellXfs count=\"") + QString::number(formats.size() + 1) + QStringLiteral("\">");
+    xml += QStringLiteral("<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>");
+    for (int index = 0; index < formats.size(); ++index) {
+        xml += QStringLiteral("<xf numFmtId=\"0\" fontId=\"") + QString::number(index + 1)
+               + QStringLiteral("\" fillId=\"") + QString::number(index + 2)
+               + QStringLiteral("\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\"/>");
+    }
+    xml += QStringLiteral("</cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>");
+    return xml;
+}
+
+QString sheetXml(const XlsxWorkbookSheet &sheet, const QHash<QString, int> &formatIndexes)
 {
     QString xml;
     xml += QStringLiteral("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
     xml += QStringLiteral("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
 
     xml += QStringLiteral("<row r=\"1\">");
-    for (int column = 0; column < headers.size(); ++column) {
+    for (int column = 0; column < sheet.headers.size(); ++column) {
         xml += QStringLiteral("<c r=\"") + columnName(column + 1) + QStringLiteral("1\" t=\"inlineStr\"><is><t>")
-               + xmlEscaped(headers.at(column)) + QStringLiteral("</t></is></c>");
+               + xmlEscaped(sheet.headers.at(column)) + QStringLiteral("</t></is></c>");
     }
     xml += QStringLiteral("</row>");
 
-    for (int rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
-        const QList<QVariant> &row = rows.at(rowIndex);
+    for (int rowIndex = 0; rowIndex < sheet.rows.size(); ++rowIndex) {
+        const QList<QVariant> &row = sheet.rows.at(rowIndex);
         const int excelRow = rowIndex + 2;
         xml += QStringLiteral("<row r=\"") + QString::number(excelRow) + QStringLiteral("\">");
-        for (int column = 0; column < headers.size(); ++column) {
+        for (int column = 0; column < sheet.headers.size(); ++column) {
             const QVariant value = column < row.size() ? row.at(column) : QVariant();
             const QString cellRef = columnName(column + 1) + QString::number(excelRow);
             if (!value.isValid() || value.toString().isEmpty()) {
                 continue;
             }
 
+            QString styleAttribute;
+            const auto format = sheet.cellFormats.constFind(cellRef);
+            if (format != sheet.cellFormats.constEnd()) {
+                const int styleIndex = formatIndexes.value(cellFormatKey(format.value()));
+                if (styleIndex > 0) {
+                    styleAttribute = QStringLiteral(" s=\"") + QString::number(styleIndex) + QStringLiteral("\"");
+                }
+            }
+
             const QVariant::Type type = value.type();
             if (type == QVariant::Int || type == QVariant::LongLong || type == QVariant::UInt
                 || type == QVariant::ULongLong || type == QVariant::Double) {
-                xml += QStringLiteral("<c r=\"") + cellRef + QStringLiteral("\"><v>")
+                xml += QStringLiteral("<c r=\"") + cellRef + QStringLiteral("\"") + styleAttribute + QStringLiteral("><v>")
                        + xmlEscaped(value.toString()) + QStringLiteral("</v></c>");
             } else {
-                xml += QStringLiteral("<c r=\"") + cellRef + QStringLiteral("\" t=\"inlineStr\"><is><t>")
+                xml += QStringLiteral("<c r=\"") + cellRef + QStringLiteral("\"") + styleAttribute + QStringLiteral(" t=\"inlineStr\"><is><t>")
                        + xmlEscaped(value.toString()) + QStringLiteral("</t></is></c>");
             }
         }
@@ -369,15 +465,18 @@ QString sheetXml(const QStringList &headers, const QList<QList<QVariant>> &rows)
     return xml;
 }
 
-QString workbookXml(const QString &sheetName)
+QString workbookXml(const QList<XlsxWorkbookSheet> &sheets)
 {
-    return QStringLiteral(
-               "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-               "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
-               "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
-               "<sheets><sheet name=\"")
-           + xmlEscaped(sheetName)
-           + QStringLiteral("\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");
+    QString xml = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
+        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>");
+    for (int index = 0; index < sheets.size(); ++index) {
+        xml += QStringLiteral("<sheet name=\"") + xmlEscaped(sheets.at(index).name)
+               + QStringLiteral("\" sheetId=\"") + QString::number(index + 1)
+               + QStringLiteral("\" r:id=\"rId") + QString::number(index + 1) + QStringLiteral("\"/>");
+    }
+    return xml + QStringLiteral("</sheets></workbook>");
 }
 
 QString relationshipRootXml()
@@ -389,25 +488,34 @@ QString relationshipRootXml()
         "</Relationships>");
 }
 
-QString workbookRelationshipsXml()
+QString workbookRelationshipsXml(int sheetCount)
 {
-    return QStringLiteral(
+    QString xml = QStringLiteral(
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-        "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>"
-        "</Relationships>");
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+    for (int index = 0; index < sheetCount; ++index) {
+        xml += QStringLiteral("<Relationship Id=\"rId") + QString::number(index + 1)
+               + QStringLiteral("\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet")
+               + QString::number(index + 1) + QStringLiteral(".xml\"/>");
+    }
+    xml += QStringLiteral("<Relationship Id=\"rId") + QString::number(sheetCount + 1)
+           + QStringLiteral("\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>");
+    return xml + QStringLiteral("</Relationships>");
 }
 
-QString contentTypesXml()
+QString contentTypesXml(int sheetCount)
 {
-    return QStringLiteral(
+    QString xml = QStringLiteral(
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
         "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
         "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
         "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
-        "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
-        "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
-        "</Types>");
+        "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>");
+    for (int index = 0; index < sheetCount; ++index) {
+        xml += QStringLiteral("<Override PartName=\"/xl/worksheets/sheet") + QString::number(index + 1)
+               + QStringLiteral(".xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>");
+    }
+    return xml + QStringLiteral("<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>");
 }
 
 bool parseSheetXml(const QByteArray &xmlContent,
@@ -544,20 +652,51 @@ bool SimpleXlsxDocument::writeSheet(const QString &filePath,
                                     const QList<QList<QVariant>> &rows,
                                     QString *errorMessage)
 {
-    if (headers.isEmpty()) {
+    XlsxWorkbookSheet sheet;
+    sheet.name = sheetName;
+    sheet.headers = headers;
+    sheet.rows = rows;
+    return writeWorkbook(filePath, {sheet}, errorMessage);
+}
+
+bool SimpleXlsxDocument::writeWorkbook(const QString &filePath,
+                                       const QList<XlsxWorkbookSheet> &sheets,
+                                       QString *errorMessage)
+{
+    if (sheets.isEmpty()) {
         if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("Excel 表头不能为空。");
+            *errorMessage = QStringLiteral("Excel 工作簿至少需要一个工作表。");
         }
         return false;
     }
 
-    const QList<QPair<QString, QByteArray>> entries = {
-        {QStringLiteral("[Content_Types].xml"), contentTypesXml().toUtf8()},
-        {QStringLiteral("_rels/.rels"), relationshipRootXml().toUtf8()},
-        {QStringLiteral("xl/workbook.xml"), workbookXml(sheetName).toUtf8()},
-        {QStringLiteral("xl/_rels/workbook.xml.rels"), workbookRelationshipsXml().toUtf8()},
-        {QStringLiteral("xl/worksheets/sheet1.xml"), sheetXml(headers, rows).toUtf8()}
-    };
+    for (const XlsxWorkbookSheet &sheet : sheets) {
+        if (sheet.name.trimmed().isEmpty()) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("Excel 工作表名称不能为空。");
+            }
+            return false;
+        }
+        if (sheet.headers.isEmpty()) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("Excel 表头不能为空。");
+            }
+            return false;
+        }
+    }
+
+    const QList<XlsxCellFormat> formats = workbookFormats(sheets);
+    const QHash<QString, int> formatIndexes = styleIndexes(formats);
+    QList<QPair<QString, QByteArray>> entries;
+    entries.append({QStringLiteral("[Content_Types].xml"), contentTypesXml(sheets.size()).toUtf8()});
+    entries.append({QStringLiteral("_rels/.rels"), relationshipRootXml().toUtf8()});
+    entries.append({QStringLiteral("xl/workbook.xml"), workbookXml(sheets).toUtf8()});
+    entries.append({QStringLiteral("xl/_rels/workbook.xml.rels"), workbookRelationshipsXml(sheets.size()).toUtf8()});
+    entries.append({QStringLiteral("xl/styles.xml"), stylesXml(formats).toUtf8()});
+    for (int index = 0; index < sheets.size(); ++index) {
+        entries.append({QStringLiteral("xl/worksheets/sheet%1.xml").arg(index + 1),
+                        sheetXml(sheets.at(index), formatIndexes).toUtf8()});
+    }
 
     return writeZipArchive(filePath, entries, errorMessage);
 }

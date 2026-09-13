@@ -1,4 +1,4 @@
-#include "jsonstorageservice.h"
+﻿#include "jsonstorageservice.h"
 
 #include "aiinventoryenricher.h"
 #include "emailsettings.h"
@@ -22,6 +22,7 @@
 
 namespace {
 const char kUsersPageId[] = "users";
+const char kDemandLibraryPageId[] = "demand_library";
 const char kDefaultPassword[] = "12345678";
 const int kVerificationCodeExpiryMinutes = 10;
 const int kVerificationSendWindowSeconds = 60;
@@ -103,6 +104,11 @@ QString nowString()
 bool isReimbursementPage(const QString &pageId)
 {
     return pageId == QStringLiteral("reimbursement");
+}
+
+bool isDemandLibraryPage(const QString &pageId)
+{
+    return pageId == QString::fromLatin1(kDemandLibraryPageId);
 }
 
 QStringList reimbursementAttachmentKeys()
@@ -195,6 +201,8 @@ QString inventoryInputTypeText(InventoryInputType inputType)
     switch (inputType) {
     case InventoryInputType::Manual:
         return QStringLiteral("手动录入");
+    case InventoryInputType::Scanner:
+        return QStringLiteral("扫码入库");
     case InventoryInputType::Excel:
         return QStringLiteral("Excel 导入");
     }
@@ -211,6 +219,8 @@ QString inventoryFulfillmentStatusText(InventoryFulfillmentStatus status)
         return QStringLiteral("有该元件但数量不足");
     case InventoryFulfillmentStatus::Missing:
         return QStringLiteral("无该元件");
+    case InventoryFulfillmentStatus::PendingConfirmation:
+        return QStringLiteral("待人工确认");
     }
 
     return QStringLiteral("未知");
@@ -330,6 +340,381 @@ QStringList quantityAliases()
     };
 }
 
+QString fulfillmentMatchedValue(const InventoryFulfillmentResult &result, const QString &fieldKey)
+{
+    if (fieldKey == QStringLiteral("manufacturerPart")) {
+        return result.manufacturerPart.trimmed();
+    }
+    if (fieldKey == QStringLiteral("value")) {
+        for (const InventoryMatchCandidate &candidate : result.candidates) {
+            if (candidate.itemId == result.itemId) {
+                return candidate.value.trimmed();
+            }
+        }
+        return QString();
+    }
+    if (fieldKey == QStringLiteral("footprint")) {
+        for (const InventoryMatchCandidate &candidate : result.candidates) {
+            if (candidate.itemId == result.itemId) {
+                return candidate.footprint.trimmed();
+            }
+        }
+        return QString();
+    }
+    if (fieldKey == QStringLiteral("supplier")) {
+        for (const InventoryMatchCandidate &candidate : result.candidates) {
+            if (candidate.itemId == result.itemId) {
+                return candidate.supplier.trimmed();
+            }
+        }
+        return QString();
+    }
+    if (fieldKey == QStringLiteral("voltage")) {
+        for (const InventoryMatchCandidate &candidate : result.candidates) {
+            if (candidate.itemId == result.itemId) {
+                return candidate.voltage.trimmed();
+            }
+        }
+        return QString();
+    }
+    return QString();
+}
+
+QStringList nameAliases()
+{
+    return {
+        QStringLiteral("Description"),
+        QStringLiteral("Name"),
+        QStringLiteral("Part Name"),
+        QStringLiteral("器件名称"),
+        QStringLiteral("名称"),
+        QStringLiteral("描述")
+    };
+}
+
+QStringList valueAliases()
+{
+    return {
+        QStringLiteral("Comment"),
+        QStringLiteral("Value"),
+        QStringLiteral("特征值"),
+        QStringLiteral("规格"),
+        QStringLiteral("参数")
+    };
+}
+
+QStringList footprintAliases()
+{
+    return {
+        QStringLiteral("Footprint"),
+        QStringLiteral("Package"),
+        QStringLiteral("封装")
+    };
+}
+
+QStringList voltageAliases()
+{
+    return {
+        QStringLiteral("Voltage"),
+        QStringLiteral("特征值"),
+        QStringLiteral("额定电压"),
+        QStringLiteral("电压")
+    };
+}
+
+QStringList manufacturerAliases()
+{
+    return {
+        QStringLiteral("Manufacturer"),
+        QStringLiteral("Brand"),
+        QStringLiteral("厂家"),
+        QStringLiteral("品牌")
+    };
+}
+
+QStringList supplierAliases()
+{
+    return {
+        QStringLiteral("Supplier"),
+        QStringLiteral("Vendor"),
+        QStringLiteral("供应商"),
+        QStringLiteral("供货商")
+    };
+}
+
+QStringList deviceAliases()
+{
+    return {
+        QStringLiteral("Device"),
+        QStringLiteral("LibRef"),
+        QStringLiteral("器件"),
+        QStringLiteral("库元件")
+    };
+}
+
+QStringList categoryAliases()
+{
+    return {
+        QStringLiteral("Category"),
+        QStringLiteral("分类"),
+        QStringLiteral("物料分类")
+    };
+}
+
+QStringList designatorAliases()
+{
+    return {
+        QStringLiteral("Designator"),
+        QStringLiteral("RefDes"),
+        QStringLiteral("位号")
+    };
+}
+
+QStringList commentAliases()
+{
+    return {
+        QStringLiteral("Note"),
+        QStringLiteral("Remark"),
+        QStringLiteral("备注"),
+        QStringLiteral("说明")
+    };
+}
+
+QString normalizeMatchText(QString text)
+{
+    text = text.trimmed().toLower();
+    QString normalized;
+    normalized.reserve(text.size());
+    for (const QChar ch : text) {
+        if (ch.isLetterOrNumber() || ch.unicode() > 127) {
+            normalized.append(ch);
+        }
+    }
+    return normalized;
+}
+
+QString normalizeFootprintText(QString text)
+{
+    const QString normalized = normalizeMatchText(std::move(text));
+    if (normalized.size() < 5 || !normalized.front().isLetter()) {
+        return normalized;
+    }
+
+    int prefixLength = 0;
+    while (prefixLength < normalized.size() && normalized.at(prefixLength).isLetter()) {
+        ++prefixLength;
+    }
+    const QString stripped = normalized.mid(prefixLength);
+    if (stripped.size() < 4) {
+        return normalized;
+    }
+
+    for (const QChar ch : stripped) {
+        if (ch.isDigit()) {
+            return stripped;
+        }
+    }
+    return normalized;
+}
+
+bool demandItemHasIdentity(const DemandListItem &item)
+{
+    return !item.manufacturerPart.trimmed().isEmpty()
+           || !item.name.trimmed().isEmpty()
+           || !item.value.trimmed().isEmpty()
+           || !item.footprint.trimmed().isEmpty()
+           || !item.voltage.trimmed().isEmpty()
+           || !item.manufacturer.trimmed().isEmpty()
+           || !item.supplier.trimmed().isEmpty()
+           || !item.device.trimmed().isEmpty()
+           || !item.category.trimmed().isEmpty();
+}
+
+QString demandItemSummary(const DemandListItem &item)
+{
+    QStringList parts;
+    if (!item.manufacturerPart.trimmed().isEmpty()) {
+        parts.append(item.manufacturerPart.trimmed());
+    }
+    if (!item.name.trimmed().isEmpty()) {
+        parts.append(item.name.trimmed());
+    }
+    if (!item.value.trimmed().isEmpty()) {
+        parts.append(item.value.trimmed());
+    }
+    if (!item.footprint.trimmed().isEmpty()) {
+        parts.append(item.footprint.trimmed());
+    }
+    if (!item.voltage.trimmed().isEmpty()) {
+        parts.append(item.voltage.trimmed());
+    }
+    if (!item.supplier.trimmed().isEmpty()) {
+        parts.append(item.supplier.trimmed());
+    }
+    return parts.join(QStringLiteral(" / "));
+}
+
+void fillResultRequestFields(const DemandListItem &item,
+                             const QStringList &sourceHeaders,
+                             const QString &sourceLabel,
+                             int buildCount,
+                             InventoryFulfillmentResult *result)
+{
+    result->requestManufacturerPart = item.manufacturerPart;
+    result->manufacturerPart = item.manufacturerPart;
+    result->requestName = item.name;
+    result->requestValue = item.value;
+    result->requestFootprint = item.footprint;
+    result->requestVoltage = item.voltage;
+    result->requestManufacturer = item.manufacturer;
+    result->requestSupplier = item.supplier;
+    result->requestDevice = item.device;
+    result->requestCategory = item.category;
+    result->requestDesignator = item.designator;
+    result->requestComment = item.comment;
+    result->sourceHeaders = sourceHeaders;
+    result->sourceRowValues = item.originalRowValues;
+    result->requiredQuantity = item.quantity * buildCount;
+    result->sourceRows = {item.sourceRow};
+    result->sourceFile = sourceLabel;
+}
+
+bool directFieldMatches(const QString &demandValue,
+                        const QString &recordValue,
+                        bool useFootprintNormalization = false,
+                        bool allowRecordContainsDemand = false)
+{
+    const QString normalizedDemand = useFootprintNormalization
+                                         ? normalizeFootprintText(demandValue)
+                                         : normalizeMatchText(demandValue);
+    const QString normalizedRecord = useFootprintNormalization
+                                         ? normalizeFootprintText(recordValue)
+                                         : normalizeMatchText(recordValue);
+    if (normalizedDemand.isEmpty() || normalizedRecord.isEmpty()) {
+        return false;
+    }
+    if (normalizedDemand == normalizedRecord) {
+        return true;
+    }
+    return allowRecordContainsDemand && normalizedRecord.contains(normalizedDemand);
+}
+
+int scoreDemandAgainstRecord(const DemandListItem &item,
+                             const QVariantMap &record,
+                             QStringList *matchedFields,
+                             bool *isExactManufacturerPartMatch)
+{
+    if (matchedFields != nullptr) {
+        matchedFields->clear();
+    }
+    if (isExactManufacturerPartMatch != nullptr) {
+        *isExactManufacturerPartMatch = false;
+    }
+
+    int score = 0;
+    bool hasIdentityField = false;
+    int matchedFieldCount = 0;
+
+    struct DemandRecordField {
+        QString demandValue;
+        QString recordKey;
+        int weight = 0;
+        bool useFootprintNormalization = false;
+        bool allowRecordContainsDemand = false;
+    };
+
+    const QList<DemandRecordField> fields = {
+        {item.manufacturerPart, QStringLiteral("manufacturerPart"), 300, false, false},
+        {item.value, QStringLiteral("value"), 150, false, true},
+        {item.footprint, QStringLiteral("footprint"), 145, true, true},
+        {item.voltage, QStringLiteral("voltage"), 130, false, true},
+        {item.name, QStringLiteral("name"), 125, false, true},
+        {item.manufacturer, QStringLiteral("manufacturer"), 90, false, true},
+        {item.supplier, QStringLiteral("supplier"), 85, false, true},
+        {item.device, QStringLiteral("device"), 75, false, true},
+        {item.category, QStringLiteral("category"), 60, false, true},
+        {item.designator, QStringLiteral("designator"), 45, false, true}
+    };
+
+    for (const DemandRecordField &field : fields) {
+        const QString demandValue = field.demandValue.trimmed();
+        if (demandValue.isEmpty()) {
+            continue;
+        }
+
+        hasIdentityField = true;
+        const QString recordValue = record.value(field.recordKey).toString();
+        const bool matched = directFieldMatches(demandValue,
+                                                recordValue,
+                                                field.useFootprintNormalization,
+                                                field.allowRecordContainsDemand);
+        if (!matched) {
+            continue;
+        }
+
+        score += field.weight;
+        ++matchedFieldCount;
+        if (matchedFields != nullptr) {
+            matchedFields->append(field.recordKey);
+        }
+        if (field.recordKey == QStringLiteral("manufacturerPart")
+            && isExactManufacturerPartMatch != nullptr) {
+            *isExactManufacturerPartMatch = true;
+        }
+    }
+
+    if (!hasIdentityField) {
+        return 0;
+    }
+    return matchedFieldCount > 0 ? score : 0;
+}
+
+InventoryMatchCandidate matchCandidateFromRecord(const QVariantMap &record,
+                                                 int score,
+                                                 const QStringList &matchedFields)
+{
+    InventoryMatchCandidate candidate;
+    candidate.itemId = record.value(QStringLiteral("id")).toString();
+    candidate.manufacturerPart = record.value(QStringLiteral("manufacturerPart")).toString();
+    candidate.manufacturer = record.value(QStringLiteral("manufacturer")).toString();
+    candidate.supplier = record.value(QStringLiteral("supplier")).toString();
+    candidate.name = record.value(QStringLiteral("name")).toString();
+    candidate.value = record.value(QStringLiteral("value")).toString();
+    candidate.footprint = record.value(QStringLiteral("footprint")).toString();
+    candidate.voltage = record.value(QStringLiteral("voltage")).toString();
+    candidate.uniqueId = record.value(QStringLiteral("uniqueId")).toString();
+    candidate.unit = record.value(QStringLiteral("unit")).toString();
+    candidate.location = record.value(QStringLiteral("location")).toString();
+    candidate.availableQuantity = record.value(QStringLiteral("quantity")).toInt();
+    candidate.score = score;
+    candidate.matchedFields = matchedFields;
+    return candidate;
+}
+
+void applyCandidateToResult(const InventoryMatchCandidate &candidate,
+                            bool confirmed,
+                            InventoryFulfillmentResult *result)
+{
+    result->itemId = candidate.itemId;
+    if (!candidate.manufacturerPart.trimmed().isEmpty()) {
+        result->manufacturerPart = candidate.manufacturerPart;
+    }
+    result->manufacturer = candidate.manufacturer;
+    result->name = candidate.name;
+    result->uniqueId = candidate.uniqueId;
+    result->unit = candidate.unit;
+    result->location = candidate.location;
+    result->availableQuantity = candidate.availableQuantity;
+    result->matchScore = candidate.score;
+    result->matchedFields = candidate.matchedFields;
+    result->confirmed = confirmed;
+    result->status = confirmed
+                         ? (result->availableQuantity >= result->requiredQuantity
+                                ? InventoryFulfillmentStatus::Sufficient
+                                : InventoryFulfillmentStatus::Insufficient)
+                         : InventoryFulfillmentStatus::PendingConfirmation;
+}
+
 QString sourceRowsText(const QList<int> &sourceRows)
 {
     QStringList values;
@@ -371,6 +756,256 @@ int findHeaderIndex(const QStringList &headers, const QStringList &aliases)
         }
     }
     return -1;
+}
+
+bool parseDemandListFile(const QString &filePath,
+                         QList<DemandListItem> *items,
+                         QStringList *headers,
+                         QStringList *failures,
+                         QString *errorMessage)
+{
+    if (items == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("配单条目输出参数不能为空。");
+        }
+        return false;
+    }
+
+    XlsxSheetData sheetData;
+    if (!SimpleXlsxDocument::readSheet(filePath, &sheetData, errorMessage)) {
+        return false;
+    }
+
+    if (sheetData.headers.isEmpty() || sheetData.rows.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("导入文件没有可用的数据行。");
+        }
+        return false;
+    }
+
+    const int quantityColumn = findHeaderIndex(sheetData.headers, quantityAliases());
+    const int manufacturerPartColumn = findHeaderIndex(sheetData.headers, manufacturerPartAliases());
+    const int nameColumn = findHeaderIndex(sheetData.headers, nameAliases());
+    const int valueColumn = findHeaderIndex(sheetData.headers, valueAliases());
+    const int footprintColumn = findHeaderIndex(sheetData.headers, footprintAliases());
+    const int voltageColumn = findHeaderIndex(sheetData.headers, voltageAliases());
+    const int manufacturerColumn = findHeaderIndex(sheetData.headers, manufacturerAliases());
+    const int supplierColumn = findHeaderIndex(sheetData.headers, supplierAliases());
+    const int deviceColumn = findHeaderIndex(sheetData.headers, deviceAliases());
+    const int categoryColumn = findHeaderIndex(sheetData.headers, categoryAliases());
+    const int designatorColumn = findHeaderIndex(sheetData.headers, designatorAliases());
+    const int commentColumn = findHeaderIndex(sheetData.headers, commentAliases());
+
+    if (quantityColumn < 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("配单表缺少 Quantity 列。请至少提供 Quantity 和一个识别字段（Manufacturer Part / Name / Value / Footprint / 特征值 等）。");
+        }
+        return false;
+    }
+
+    items->clear();
+    if (headers != nullptr) {
+        *headers = sheetData.headers;
+    }
+    if (failures != nullptr) {
+        failures->clear();
+    }
+
+    auto optionalCellText = [](const QStringList &values, int columnIndex) {
+        return columnIndex >= 0 && columnIndex < values.size()
+                   ? values.at(columnIndex).trimmed()
+                   : QString();
+    };
+
+    for (int rowIndex = 0; rowIndex < sheetData.rows.size(); ++rowIndex) {
+        const QStringList &values = sheetData.rows.at(rowIndex);
+        const QString rawQuantity = optionalCellText(values, quantityColumn);
+        const QString manufacturerPart = optionalCellText(values, manufacturerPartColumn);
+        const QString name = optionalCellText(values, nameColumn);
+        const QString value = optionalCellText(values, valueColumn);
+        const QString footprint = optionalCellText(values, footprintColumn);
+        const QString voltage = optionalCellText(values, voltageColumn);
+        const QString manufacturer = optionalCellText(values, manufacturerColumn);
+        const QString supplier = optionalCellText(values, supplierColumn);
+        const QString device = optionalCellText(values, deviceColumn);
+        const QString category = optionalCellText(values, categoryColumn);
+        const QString designator = optionalCellText(values, designatorColumn);
+        const QString comment = optionalCellText(values, commentColumn);
+
+        if (manufacturerPart.isEmpty()
+            && name.isEmpty()
+            && value.isEmpty()
+            && footprint.isEmpty()
+            && voltage.isEmpty()
+            && manufacturer.isEmpty()
+            && supplier.isEmpty()
+            && device.isEmpty()
+            && category.isEmpty()
+            && designator.isEmpty()
+            && comment.isEmpty()
+            && rawQuantity.isEmpty()) {
+            continue;
+        }
+
+        bool ok = false;
+        const int quantity = rawQuantity.toInt(&ok);
+        if (!ok || quantity <= 0) {
+            if (failures != nullptr) {
+                failures->append(QStringLiteral("第 %1 行：Quantity 必须是大于 0 的整数。").arg(rowIndex + 2));
+            }
+            continue;
+        }
+
+        DemandListItem item;
+        item.manufacturerPart = manufacturerPart;
+        item.name = name;
+        item.value = value;
+        item.footprint = footprint;
+        item.voltage = voltage;
+        item.manufacturer = manufacturer;
+        item.supplier = supplier;
+        item.device = device;
+        item.category = category;
+        item.designator = designator;
+        item.comment = comment;
+        item.originalRowValues = values;
+        item.quantity = quantity;
+        item.sourceRow = rowIndex + 2;
+
+        if (!demandItemHasIdentity(item)) {
+            if (failures != nullptr) {
+                failures->append(QStringLiteral("第 %1 行：缺少可用的识别信息，请至少提供 Manufacturer Part / Name / Value / Footprint / 特征值 等字段。").arg(rowIndex + 2));
+            }
+            continue;
+        }
+
+        items->append(item);
+    }
+
+    if (items->isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = failures != nullptr && !failures->isEmpty()
+                                ? failures->join(QStringLiteral("\n"))
+                                : QStringLiteral("配单表中没有可识别的数据。");
+        }
+        return false;
+    }
+
+    return true;
+}
+
+bool analyzeDemandListItems(const QList<DemandListItem> &items,
+                            const QStringList &sourceHeaders,
+                            int buildCount,
+                            const QList<QVariantMap> &inventoryRecords,
+                            const QString &sourceLabel,
+                            QList<InventoryFulfillmentResult> *results,
+                            QString *errorMessage,
+                            const QStringList &failures = {})
+{
+    if (results == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("配单结果输出参数不能为空。");
+        }
+        return false;
+    }
+    if (buildCount <= 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("制造数必须大于 0。");
+        }
+        return false;
+    }
+    if (items.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("配单清单中没有可配单的数据。");
+        }
+        return false;
+    }
+
+    QList<InventoryFulfillmentResult> analyzedResults;
+    analyzedResults.reserve(items.size());
+    int sufficientCount = 0;
+    int insufficientCount = 0;
+    int missingCount = 0;
+    int pendingCount = 0;
+
+    for (const DemandListItem &item : items) {
+        InventoryFulfillmentResult result;
+        fillResultRequestFields(item, sourceHeaders, sourceLabel, buildCount, &result);
+
+        QList<InventoryMatchCandidate> candidates;
+        candidates.reserve(inventoryRecords.size());
+        for (const QVariantMap &inventoryRecord : inventoryRecords) {
+            QStringList matchedFields;
+            bool exactManufacturerPartMatch = false;
+            int score = scoreDemandAgainstRecord(item, inventoryRecord, &matchedFields, &exactManufacturerPartMatch);
+            if (score <= 0) {
+                continue;
+            }
+            if (exactManufacturerPartMatch) {
+                score += 1000;
+            }
+            candidates.append(matchCandidateFromRecord(inventoryRecord, score, matchedFields));
+        }
+
+        std::sort(candidates.begin(), candidates.end(), [](const InventoryMatchCandidate &left,
+                                                           const InventoryMatchCandidate &right) {
+            if (left.score != right.score) {
+                return left.score > right.score;
+            }
+            if (left.availableQuantity != right.availableQuantity) {
+                return left.availableQuantity > right.availableQuantity;
+            }
+            return left.manufacturerPart.compare(right.manufacturerPart, Qt::CaseInsensitive) < 0;
+        });
+
+        if (candidates.size() > 4) {
+            candidates = candidates.mid(0, 4);
+        }
+        result.candidates = candidates;
+
+        const QString normalizedDemandManufacturerPart = normalizeMatchText(item.manufacturerPart);
+        int exactManufacturerPartCandidateCount = 0;
+        for (const InventoryMatchCandidate &candidate : candidates) {
+            if (!normalizedDemandManufacturerPart.isEmpty()
+                && normalizeMatchText(candidate.manufacturerPart) == normalizedDemandManufacturerPart) {
+                ++exactManufacturerPartCandidateCount;
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            result.status = InventoryFulfillmentStatus::Missing;
+            ++missingCount;
+        } else if (!normalizedDemandManufacturerPart.isEmpty() && exactManufacturerPartCandidateCount == 1) {
+            applyCandidateToResult(candidates.constFirst(), true, &result);
+            if (result.status == InventoryFulfillmentStatus::Sufficient) {
+                ++sufficientCount;
+            } else {
+                ++insufficientCount;
+            }
+        } else {
+            applyCandidateToResult(candidates.constFirst(), false, &result);
+            ++pendingCount;
+        }
+
+        analyzedResults.append(result);
+    }
+
+    *results = analyzedResults;
+
+    if (errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("共 %1 项需求：充足 %2 项，数量不足 %3 项，待确认 %4 项，无匹配 %5 项。")
+                            .arg(analyzedResults.size())
+                            .arg(sufficientCount)
+                            .arg(insufficientCount)
+                            .arg(pendingCount)
+                            .arg(missingCount);
+        if (!failures.isEmpty()) {
+            *errorMessage += QStringLiteral("\n\n以下行已忽略：\n") + failures.join(QStringLiteral("\n"));
+        }
+    }
+
+    return true;
 }
 
 bool validateInventoryRequiredFields(const QVariantMap &record,
@@ -1542,157 +2177,25 @@ bool JsonStorageService::importInventoryBom(const QString &filePath,
 }
 
 bool JsonStorageService::analyzeInventoryFulfillment(const QString &filePath,
+                                                    int fulfillmentSetCount,
                                                     QList<InventoryFulfillmentResult> *results,
                                                     QString *errorMessage) const
 {
-    if (results == nullptr) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("配单结果输出参数不能为空。");
-        }
-        return false;
-    }
-
-    XlsxSheetData sheetData;
-    if (!SimpleXlsxDocument::readSheet(filePath, &sheetData, errorMessage)) {
-        return false;
-    }
-
-    if (sheetData.headers.isEmpty() || sheetData.rows.isEmpty()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("导入文件没有可用的数据行。");
-        }
-        return false;
-    }
-
-    const int manufacturerPartColumn = findHeaderIndex(sheetData.headers, manufacturerPartAliases());
-    const int quantityColumn = findHeaderIndex(sheetData.headers, quantityAliases());
-    if (manufacturerPartColumn < 0 || quantityColumn < 0) {
-        if (errorMessage != nullptr) {
-            QStringList missingHeaders;
-            if (manufacturerPartColumn < 0) {
-                missingHeaders.append(QStringLiteral("Manufacturer Part"));
-            }
-            if (quantityColumn < 0) {
-                missingHeaders.append(QStringLiteral("Quantity"));
-            }
-            *errorMessage = QStringLiteral("配单清单缺少关键列：%1。当前配单仅识别 Manufacturer Part 和 Quantity 两列。")
-                                .arg(missingHeaders.join(QStringLiteral("、")));
-        }
-        return false;
-    }
-
-    struct DemandAggregate {
-        int requiredQuantity = 0;
-        QList<int> sourceRows;
-    };
-
-    QMap<QString, DemandAggregate> aggregatedDemand;
-    QStringList orderedManufacturerParts;
+    QList<DemandListItem> items;
+    QStringList headers;
     QStringList failures;
-
-    for (int rowIndex = 0; rowIndex < sheetData.rows.size(); ++rowIndex) {
-        const QStringList &values = sheetData.rows.at(rowIndex);
-        const QString manufacturerPart = manufacturerPartColumn < values.size()
-                                             ? values.at(manufacturerPartColumn).trimmed()
-                                             : QString();
-        const QString rawQuantity = quantityColumn < values.size()
-                                        ? values.at(quantityColumn).trimmed()
-                                        : QString();
-
-        if (manufacturerPart.isEmpty() && rawQuantity.isEmpty()) {
-            continue;
-        }
-
-        bool ok = false;
-        const int quantity = rawQuantity.toInt(&ok);
-        if (manufacturerPart.isEmpty()) {
-            failures.append(QStringLiteral("第 %1 行：Manufacturer Part 不能为空。").arg(rowIndex + 2));
-            continue;
-        }
-        if (!ok || quantity <= 0) {
-            failures.append(QStringLiteral("第 %1 行：Quantity 必须是大于 0 的整数。").arg(rowIndex + 2));
-            continue;
-        }
-
-        if (!aggregatedDemand.contains(manufacturerPart)) {
-            orderedManufacturerParts.append(manufacturerPart);
-        }
-        DemandAggregate aggregate = aggregatedDemand.value(manufacturerPart);
-        aggregate.requiredQuantity += quantity;
-        aggregate.sourceRows.append(rowIndex + 2);
-        aggregatedDemand.insert(manufacturerPart, aggregate);
-    }
-
-    if (aggregatedDemand.isEmpty()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = failures.isEmpty()
-                                ? QStringLiteral("配单清单中没有可识别的数据。")
-                                : failures.join(QStringLiteral("\n"));
-        }
+    if (!parseDemandListFile(filePath, &items, &headers, &failures, errorMessage)) {
         return false;
     }
 
-    const QList<QVariantMap> inventoryRecords = loadPageRecords(QStringLiteral("inventory"));
-    QList<InventoryFulfillmentResult> analyzedResults;
-    analyzedResults.reserve(orderedManufacturerParts.size());
-
-    int sufficientCount = 0;
-    int insufficientCount = 0;
-    int missingCount = 0;
-    const QString sourceFile = QFileInfo(filePath).fileName();
-
-    for (const QString &manufacturerPart : orderedManufacturerParts) {
-        const DemandAggregate aggregate = aggregatedDemand.value(manufacturerPart);
-
-        InventoryFulfillmentResult result;
-        result.manufacturerPart = manufacturerPart;
-        result.requiredQuantity = aggregate.requiredQuantity;
-        result.sourceRows = aggregate.sourceRows;
-        result.sourceFile = sourceFile;
-
-        int matchedIndex = -1;
-        const int matchCount = countUniqueMatches(inventoryRecords,
-                                                  QStringLiteral("manufacturerPart"),
-                                                  manufacturerPart,
-                                                  &matchedIndex);
-        if (matchCount == 1 && matchedIndex >= 0) {
-            const QVariantMap matchedRecord = inventoryRecords.at(matchedIndex);
-            result.itemId = matchedRecord.value(QStringLiteral("id")).toString();
-            result.availableQuantity = matchedRecord.value(QStringLiteral("quantity")).toInt();
-            result.manufacturer = matchedRecord.value(QStringLiteral("manufacturer")).toString();
-            result.name = matchedRecord.value(QStringLiteral("name")).toString();
-            result.uniqueId = matchedRecord.value(QStringLiteral("uniqueId")).toString();
-            result.unit = matchedRecord.value(QStringLiteral("unit")).toString();
-            result.location = matchedRecord.value(QStringLiteral("location")).toString();
-            if (result.availableQuantity >= result.requiredQuantity) {
-                result.status = InventoryFulfillmentStatus::Sufficient;
-                ++sufficientCount;
-            } else {
-                result.status = InventoryFulfillmentStatus::Insufficient;
-                ++insufficientCount;
-            }
-        } else {
-            result.status = InventoryFulfillmentStatus::Missing;
-            ++missingCount;
-        }
-
-        analyzedResults.append(result);
-    }
-
-    *results = analyzedResults;
-
-    if (errorMessage != nullptr) {
-        *errorMessage = QStringLiteral("共 %1 种元件：充足 %2 种，数量不足 %3 种，无料 %4 种。")
-                            .arg(analyzedResults.size())
-                            .arg(sufficientCount)
-                            .arg(insufficientCount)
-                            .arg(missingCount);
-        if (!failures.isEmpty()) {
-            *errorMessage += QStringLiteral("\n\n以下行已忽略：\n") + failures.join(QStringLiteral("\n"));
-        }
-    }
-
-    return true;
+    return analyzeDemandListItems(items,
+                                  headers,
+                                  fulfillmentSetCount,
+                                  loadPageRecords(QStringLiteral("inventory")),
+                                  QFileInfo(filePath).fileName(),
+                                  results,
+                                  errorMessage,
+                                  failures);
 }
 
 bool JsonStorageService::enrichInventoryRecord(const QString &manufacturerPart,
@@ -1709,9 +2212,192 @@ bool JsonStorageService::enrichInventoryRecord(const QString &manufacturerPart,
                                        errorMessage);
 }
 
+bool JsonStorageService::importDemandList(const QString &name,
+                                         const QString &filePath,
+                                         QString *errorMessage) const
+{
+    const QString trimmedName = name.trimmed();
+    if (trimmedName.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("清单名称不能为空。");
+        }
+        return false;
+    }
+
+    QFileInfo sourceInfo(filePath);
+    if (!sourceInfo.exists() || !sourceInfo.isFile()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("清单文件不存在或不可读取。");
+        }
+        return false;
+    }
+
+    QList<DemandListItem> items;
+    QStringList headers;
+    QStringList failures;
+    if (!parseDemandListFile(filePath, &items, &headers, &failures, errorMessage)) {
+        return false;
+    }
+
+    QList<QVariantMap> records = loadPageRecords(QString::fromLatin1(kDemandLibraryPageId));
+    for (const QVariantMap &record : records) {
+        if (record.value(QStringLiteral("name")).toString().trimmed().compare(trimmedName, Qt::CaseInsensitive) == 0) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("清单名称已存在：%1").arg(trimmedName);
+            }
+            return false;
+        }
+    }
+
+    const QString recordId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString timestamp = nowString();
+    const QString attachmentDirectory = recordAttachmentDirectory(QString::fromLatin1(kDemandLibraryPageId), recordId);
+    const QString attachmentRelativeDirectory = recordAttachmentRelativeDirectory(QString::fromLatin1(kDemandLibraryPageId), recordId);
+    QDir dir;
+    if (!dir.mkpath(attachmentDirectory)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("创建清单归档目录失败。");
+        }
+        return false;
+    }
+
+    const QString archivedFileName = QUuid::createUuid().toString(QUuid::WithoutBraces)
+                                     + QStringLiteral("_")
+                                     + sourceInfo.fileName();
+    const QString archivedPath = QDir(attachmentDirectory).filePath(archivedFileName);
+    if (!QFile::copy(sourceInfo.absoluteFilePath(), archivedPath)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("归档清单文件失败。");
+        }
+        return false;
+    }
+
+    QVariantMap record;
+    record.insert(QStringLiteral("id"), recordId);
+    record.insert(QStringLiteral("name"), trimmedName);
+    record.insert(QStringLiteral("sourceFileName"), sourceInfo.fileName());
+    record.insert(QStringLiteral("fileReference"), QDir::cleanPath(attachmentRelativeDirectory + QStringLiteral("/") + archivedFileName));
+    record.insert(QStringLiteral("itemCount"), items.size());
+    record.insert(QStringLiteral("createdAt"), timestamp);
+    record.insert(QStringLiteral("updatedAt"), timestamp);
+    records.append(record);
+
+    if (!savePageRecords(QString::fromLatin1(kDemandLibraryPageId), records, errorMessage)) {
+        QFile::remove(archivedPath);
+        removeFilesAndEmptyParents({archivedPath}, attachmentsRootDirectory());
+        return false;
+    }
+
+    if (errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("已导入清单“%1”，识别 %2 条有效需求。").arg(trimmedName).arg(items.size());
+        if (!failures.isEmpty()) {
+            *errorMessage += QStringLiteral("\n\n以下行在导入时被忽略：\n") + failures.join(QStringLiteral("\n"));
+        }
+    }
+    return true;
+}
+
+bool JsonStorageService::exportDemandList(const QString &recordId,
+                                         const QString &filePath,
+                                         QString *errorMessage) const
+{
+    const QList<QVariantMap> records = loadPageRecords(QString::fromLatin1(kDemandLibraryPageId));
+    for (const QVariantMap &record : records) {
+        if (record.value(QStringLiteral("id")).toString() != recordId) {
+            continue;
+        }
+
+        const QString archivedFilePath = demandListArchivedFilePath(record);
+        if (archivedFilePath.isEmpty()) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("当前清单没有已归档的 Excel 文件。");
+            }
+            return false;
+        }
+
+        QFile::remove(filePath);
+        if (!QFile::copy(archivedFilePath, filePath)) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("导出清单失败。");
+            }
+            return false;
+        }
+
+        return true;
+    }
+
+    if (errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("未找到指定的清单记录。");
+    }
+    return false;
+}
+
+bool JsonStorageService::loadDemandListItems(const QString &recordId,
+                                            QList<DemandListItem> *items,
+                                            QString *errorMessage) const
+{
+    if (items == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("清单条目输出参数不能为空。");
+        }
+        return false;
+    }
+
+    const QList<QVariantMap> records = loadPageRecords(QString::fromLatin1(kDemandLibraryPageId));
+    for (const QVariantMap &record : records) {
+        if (record.value(QStringLiteral("id")).toString() != recordId) {
+            continue;
+        }
+
+        QStringList failures;
+        QStringList headers;
+        return parseDemandListFile(demandListArchivedFilePath(record), items, &headers, &failures, errorMessage);
+    }
+
+    if (errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("未找到指定的清单记录。");
+    }
+    return false;
+}
+
+bool JsonStorageService::analyzeDemandListFulfillment(const QString &recordId,
+                                                     int buildCount,
+                                                     QList<InventoryFulfillmentResult> *results,
+                                                     QString *errorMessage) const
+{
+    const QList<QVariantMap> records = loadPageRecords(QString::fromLatin1(kDemandLibraryPageId));
+    for (const QVariantMap &record : records) {
+        if (record.value(QStringLiteral("id")).toString() != recordId) {
+            continue;
+        }
+
+        QList<DemandListItem> items;
+        QStringList headers;
+        QStringList failures;
+        if (!parseDemandListFile(demandListArchivedFilePath(record), &items, &headers, &failures, errorMessage)) {
+            return false;
+        }
+
+        return analyzeDemandListItems(items,
+                                      headers,
+                                      buildCount,
+                                      loadPageRecords(QStringLiteral("inventory")),
+                                      QStringLiteral("%1 x%2").arg(record.value(QStringLiteral("name")).toString(), QString::number(buildCount)),
+                                      results,
+                                      errorMessage,
+                                      failures);
+    }
+
+    if (errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("未找到指定的清单记录。");
+    }
+    return false;
+}
+
 bool JsonStorageService::exportInventoryFulfillment(const QList<InventoryFulfillmentResult> &results,
-                                                   const QString &filePath,
-                                                   QString *errorMessage) const
+                                                    const QString &sourceFilePath,
+                                                    const QString &filePath,
+                                                    QString *errorMessage) const
 {
     if (results.isEmpty()) {
         if (errorMessage != nullptr) {
@@ -1720,45 +2406,196 @@ bool JsonStorageService::exportInventoryFulfillment(const QList<InventoryFulfill
         return false;
     }
 
-    const QStringList headers = {
-        QStringLiteral("配单状态"),
-        QStringLiteral("Manufacturer Part"),
-        QStringLiteral("需求数量"),
-        QStringLiteral("可用库存"),
-        QStringLiteral("缺口数量"),
-        QStringLiteral("匹配库存物料"),
-        QStringLiteral("Manufacturer"),
-        QStringLiteral("Name"),
-        QStringLiteral("单位"),
-        QStringLiteral("存储位置"),
-        QStringLiteral("来源文件"),
-        QStringLiteral("来源行")
-    };
-
-    QList<QList<QVariant>> rows;
-    rows.reserve(results.size());
-    for (const InventoryFulfillmentResult &result : results) {
-        QList<QVariant> row;
-        row.append(inventoryFulfillmentStatusText(result.status));
-        row.append(result.manufacturerPart);
-        row.append(result.requiredQuantity);
-        row.append(result.availableQuantity);
-        row.append(qMax(0, result.requiredQuantity - result.availableQuantity));
-        row.append(inventoryFulfillmentSummary(result));
-        row.append(result.manufacturer);
-        row.append(result.name);
-        row.append(result.unit);
-        row.append(result.location);
-        row.append(result.sourceFile);
-        row.append(sourceRowsText(result.sourceRows));
-        rows.append(row);
+    XlsxSheetData sheetData;
+    if (!SimpleXlsxDocument::readSheet(sourceFilePath, &sheetData, errorMessage)) {
+        return false;
+    }
+    if (sheetData.headers.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("原始配单表缺少表头，无法按原表结构导出。");
+        }
+        return false;
     }
 
-    return SimpleXlsxDocument::writeSheet(filePath,
-                                          QStringLiteral("配单结果"),
-                                          headers,
-                                          rows,
-                                          errorMessage);
+    QList<InventoryFulfillmentResult> sortedResults = results;
+    std::stable_sort(sortedResults.begin(), sortedResults.end(), [](const InventoryFulfillmentResult &left,
+                                                                     const InventoryFulfillmentResult &right) {
+        auto priority = [](InventoryFulfillmentStatus status) {
+            switch (status) {
+            case InventoryFulfillmentStatus::Missing:
+                return 0;
+            case InventoryFulfillmentStatus::Insufficient:
+                return 1;
+            case InventoryFulfillmentStatus::Sufficient:
+                return 2;
+            case InventoryFulfillmentStatus::PendingConfirmation:
+                return 3;
+            }
+            return 4;
+        };
+        return priority(left.status) < priority(right.status);
+    });
+
+    const QStringList resultPrefixHeaders = {
+        QStringLiteral("配单状态"),
+        QStringLiteral("匹配MP"),
+        QStringLiteral("匹配Value"),
+        QStringLiteral("匹配Footprint"),
+        QStringLiteral("匹配供应商"),
+        QStringLiteral("匹配特征值"),
+        QStringLiteral("匹配库存数量"),
+        QStringLiteral("实际配单数"),
+        QStringLiteral("缺口值"),
+        QStringLiteral("库存位置")
+    };
+
+    XlsxWorkbookSheet resultSheet;
+    resultSheet.name = QStringLiteral("配单结果");
+    resultSheet.headers = resultPrefixHeaders;
+    resultSheet.headers.append(sheetData.headers);
+
+    const XlsxCellFormat missingFormat{QStringLiteral("#FFC7CE"), QStringLiteral("#9C0006"), true};
+    const XlsxCellFormat insufficientFormat{QStringLiteral("#FFEB9C"), QStringLiteral("#9C5700"), true};
+    const XlsxCellFormat sufficientFormat{QStringLiteral("#C6EFCE"), QStringLiteral("#006100"), true};
+    const XlsxCellFormat pendingFormat{QStringLiteral("#DDEBF7"), QStringLiteral("#1F4E78"), true};
+    auto formatForStatus = [&](InventoryFulfillmentStatus status) {
+        switch (status) {
+        case InventoryFulfillmentStatus::Missing:
+            return missingFormat;
+        case InventoryFulfillmentStatus::Insufficient:
+            return insufficientFormat;
+        case InventoryFulfillmentStatus::Sufficient:
+            return sufficientFormat;
+        case InventoryFulfillmentStatus::PendingConfirmation:
+            return pendingFormat;
+        }
+        return pendingFormat;
+    };
+
+    for (const InventoryFulfillmentResult &result : sortedResults) {
+        QList<QVariant> row;
+        row.append(inventoryFulfillmentStatusText(result.status));
+        row.append(fulfillmentMatchedValue(result, QStringLiteral("manufacturerPart")));
+        row.append(fulfillmentMatchedValue(result, QStringLiteral("value")));
+        row.append(fulfillmentMatchedValue(result, QStringLiteral("footprint")));
+        row.append(fulfillmentMatchedValue(result, QStringLiteral("supplier")));
+        row.append(fulfillmentMatchedValue(result, QStringLiteral("voltage")));
+        row.append(result.availableQuantity);
+        row.append(result.requiredQuantity);
+        row.append(qMax(0, result.requiredQuantity - result.availableQuantity));
+        row.append(result.location);
+
+        QStringList originalValues = result.sourceRowValues;
+        if (originalValues.isEmpty() && result.sourceRows.size() == 1) {
+            const int rowIndex = result.sourceRows.constFirst() - 2;
+            if (rowIndex >= 0 && rowIndex < sheetData.rows.size()) {
+                originalValues = sheetData.rows.at(rowIndex);
+            }
+        }
+        for (const QString &value : originalValues) {
+            row.append(value);
+        }
+        resultSheet.rows.append(row);
+        resultSheet.cellFormats.insert(QStringLiteral("A%1").arg(resultSheet.rows.size() + 1),
+                                       formatForStatus(result.status));
+    }
+
+    struct StockOutRow {
+        QString itemId;
+        QString manufacturerPart;
+        QString name;
+        QString uniqueId;
+        QString unit;
+        QString location;
+        int availableQuantity = 0;
+        int requiredQuantity = 0;
+    };
+
+    QHash<QString, StockOutRow> stockOutRowsByItemId;
+    for (const InventoryFulfillmentResult &result : sortedResults) {
+        if (result.itemId.trimmed().isEmpty() || result.status == InventoryFulfillmentStatus::Missing) {
+            continue;
+        }
+
+        StockOutRow &stockOutRow = stockOutRowsByItemId[result.itemId];
+        if (stockOutRow.itemId.isEmpty()) {
+            stockOutRow.itemId = result.itemId;
+            stockOutRow.manufacturerPart = result.manufacturerPart;
+            stockOutRow.name = result.name;
+            stockOutRow.uniqueId = result.uniqueId;
+            stockOutRow.unit = result.unit;
+            stockOutRow.location = result.location;
+            stockOutRow.availableQuantity = result.availableQuantity;
+        }
+        stockOutRow.requiredQuantity += result.requiredQuantity;
+    }
+
+    XlsxWorkbookSheet stockOutSheet;
+    stockOutSheet.name = QStringLiteral("出库元件表");
+    stockOutSheet.headers = QStringList{
+        QStringLiteral("库存物料MP"),
+        QStringLiteral("库存物料名称"),
+        QStringLiteral("Unique ID"),
+        QStringLiteral("库存位置"),
+        QStringLiteral("库存匹配数"),
+        QStringLiteral("实际配单数"),
+        QStringLiteral("出库数量"),
+        QStringLiteral("单位")
+    };
+    QList<StockOutRow> stockOutRows = stockOutRowsByItemId.values();
+    std::sort(stockOutRows.begin(), stockOutRows.end(), [](const StockOutRow &left, const StockOutRow &right) {
+        return left.manufacturerPart.compare(right.manufacturerPart, Qt::CaseInsensitive) < 0;
+    });
+    for (const StockOutRow &stockOutRow : stockOutRows) {
+        stockOutSheet.rows.append({stockOutRow.manufacturerPart,
+                                   stockOutRow.name,
+                                   stockOutRow.uniqueId,
+                                   stockOutRow.location,
+                                   stockOutRow.availableQuantity,
+                                   stockOutRow.requiredQuantity,
+                                   qMin(stockOutRow.availableQuantity, stockOutRow.requiredQuantity),
+                                   stockOutRow.unit});
+    }
+
+    const int quantityColumn = findHeaderIndex(sheetData.headers, quantityAliases());
+    if (quantityColumn < 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("原始配单表缺少 Quantity 列，无法生成缺项表。");
+        }
+        return false;
+    }
+
+    XlsxWorkbookSheet shortageSheet;
+    shortageSheet.name = QStringLiteral("缺项表");
+    shortageSheet.headers = sheetData.headers;
+    for (const InventoryFulfillmentResult &result : sortedResults) {
+        if (result.status != InventoryFulfillmentStatus::Missing
+            && result.status != InventoryFulfillmentStatus::Insufficient) {
+            continue;
+        }
+
+        QStringList sourceValues = result.sourceRowValues;
+        if (sourceValues.isEmpty() && result.sourceRows.size() == 1) {
+            const int rowIndex = result.sourceRows.constFirst() - 2;
+            if (rowIndex >= 0 && rowIndex < sheetData.rows.size()) {
+                sourceValues = sheetData.rows.at(rowIndex);
+            }
+        }
+        while (sourceValues.size() < shortageSheet.headers.size()) {
+            sourceValues.append(QString());
+        }
+        sourceValues[quantityColumn] = QString::number(qMax(0, result.requiredQuantity - result.availableQuantity));
+
+        QList<QVariant> shortageRow;
+        for (const QString &value : sourceValues) {
+            shortageRow.append(value);
+        }
+        shortageSheet.rows.append(shortageRow);
+    }
+
+    return SimpleXlsxDocument::writeWorkbook(filePath,
+                                              {resultSheet, stockOutSheet, shortageSheet},
+                                              errorMessage);
 }
 
 bool JsonStorageService::applyInventoryFulfillment(const QList<InventoryFulfillmentResult> &results,
@@ -1774,6 +2611,10 @@ bool JsonStorageService::applyInventoryFulfillment(const QList<InventoryFulfillm
     int successCount = 0;
     QStringList failures;
     for (const InventoryFulfillmentResult &result : results) {
+        if (!result.confirmed) {
+            failures.append(QStringLiteral("%1：当前项目尚未人工确认。").arg(result.manufacturerPart));
+            continue;
+        }
         if (result.status != InventoryFulfillmentStatus::Sufficient) {
             failures.append(QStringLiteral("%1：当前状态不支持一键出库。").arg(result.manufacturerPart));
             continue;
@@ -1876,9 +2717,27 @@ QString JsonStorageService::recordAttachmentDirectory(const QString &pageId, con
     return QDir(storageRoot()).filePath(recordAttachmentRelativeDirectory(pageId, recordId));
 }
 
+QString JsonStorageService::demandListArchivedFilePath(const QVariantMap &record) const
+{
+    const QString reference = record.value(QStringLiteral("fileReference")).toString().trimmed();
+    return reference.isEmpty() ? QString() : resolveAttachmentReference(storageRoot(), reference);
+}
+
 QString JsonStorageService::inventoryHistoryFilePath() const
 {
     return pageFilePath(QStringLiteral("inventory_history"));
+}
+
+bool JsonStorageService::removeDemandListArchive(const QVariantMap &record) const
+{
+    const QString archivedFilePath = demandListArchivedFilePath(record);
+    if (archivedFilePath.isEmpty()) {
+        return true;
+    }
+
+    QFile::remove(archivedFilePath);
+    removeFilesAndEmptyParents({archivedFilePath}, attachmentsRootDirectory());
+    return true;
 }
 
 bool JsonStorageService::ensureStorageReady(QString *errorMessage) const

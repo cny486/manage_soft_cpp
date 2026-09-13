@@ -7,6 +7,8 @@
 
 class AiInventoryEnricher {
 public:
+    static bool isSafeSourceUrl(const QString &url);
+
     static bool testConnection(const AiApiSettings &settings,
                                QString *responsePreview = nullptr,
                                QString *errorMessage = nullptr);

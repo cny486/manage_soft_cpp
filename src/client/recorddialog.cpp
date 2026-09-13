@@ -1,4 +1,7 @@
- #include "recorddialog.h"
+#include "recorddialog.h"
+#include "NoWheelDateEdit.h"
+#include "NoWheelDoubleSpinBox.h"
+#include "NoWheelSpinBox.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -225,18 +228,18 @@ QWidget *RecordDialog::createEditor(const FieldDefinition &field)
 {
     switch (field.type) {
     case FieldType::Integer: {
-        auto *editor = new QSpinBox(this);
+        auto *editor = new NoWheelSpinBox(this);
         editor->setRange(0, 1000000000);
         return editor;
     }
     case FieldType::Double: {
-        auto *editor = new QDoubleSpinBox(this);
+        auto *editor = new NoWheelDoubleSpinBox(this);
         editor->setRange(-1000000000.0, 1000000000.0);
         editor->setDecimals(2);
         return editor;
     }
     case FieldType::Date: {
-        auto *editor = new QDateEdit(QDate::currentDate(), this);
+        auto *editor = new NoWheelDateEdit(QDate::currentDate(), this);
         editor->setCalendarPopup(true);
         editor->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
         return editor;

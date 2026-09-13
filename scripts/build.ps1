@@ -2,7 +2,15 @@ param(
     [ValidateSet('Release', 'Debug')]
     [string]$Configuration = 'Release',
     [switch]$Clean,
-    [switch]$SingleFile
+    [switch]$SingleFile,
+    [string]$ReleaseVersion = '',
+    [string]$MinimumSupportedVersion = '',
+    [string]$ReleaseTitle = 'Client Update',
+    [string[]]$ReleaseNotes = @(
+        'Automatically checks for a newer client version after login',
+        'Downloads the update package and launches the standalone updater'
+    ),
+    [string]$PublishedAt = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,6 +20,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $buildDir = Join-Path $repoRoot 'build'
 $distDir = Join-Path $repoRoot 'dist\ManageSoftCpp'
 $distServerDir = Join-Path $repoRoot 'dist\ManageSoftServer'
+$versionSourcePath = Join-Path $repoRoot 'src\shared\appversion.cpp'
 
 $cmake = Join-Path $repoRoot '.venv\Lib\site-packages\cmake\data\bin\cmake.exe'
 if (-not (Test-Path $cmake)) {
@@ -37,6 +46,78 @@ function Resolve-FirstExistingPath {
     }
 
     return $null
+}
+
+function Get-ClientVersionFromSource {
+    param(
+        [string]$SourcePath
+    )
+
+    if (-not (Test-Path $SourcePath)) {
+        throw "Version source file not found: $SourcePath"
+    }
+
+    $content = Get-Content $SourcePath -Raw
+    $match = [regex]::Match($content, 'clientVersion\(\)\s*\{[\s\S]*?QStringLiteral\("([^"]+)"\)')
+    if (-not $match.Success) {
+        throw "Could not determine client version from: $SourcePath"
+    }
+
+    return $match.Groups[1].Value
+}
+
+function Get-Sha256Hash {
+    param(
+        [string]$Path
+    )
+
+    if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) {
+        return (Get-FileHash -Path $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        return ([System.BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $stream.Dispose()
+        $algorithm.Dispose()
+    }
+}
+
+function New-UpdateManifest {
+    param(
+        [string]$ManifestPath,
+        [string]$PackagePath,
+        [string]$Version,
+        [string]$MinimumVersion,
+        [string]$Title,
+        [string[]]$DescriptionLines,
+        [string]$PublishedDate
+    )
+
+    if (-not (Test-Path $PackagePath)) {
+        throw "Update package not found: $PackagePath"
+    }
+
+    $sha256 = Get-Sha256Hash -Path $PackagePath
+    $manifest = [ordered]@{
+        latestVersion = $Version
+        minimumSupportedVersion = $MinimumVersion
+        releases = @(
+            [ordered]@{
+                version = $Version
+                title = $Title
+                publishedAt = $PublishedDate
+                mandatory = ($MinimumVersion -eq $Version)
+                packageFile = './ManageSoftCpp-update.zip'
+                sha256 = $sha256
+                description = @($DescriptionLines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            }
+        )
+    }
+
+    $manifest | ConvertTo-Json -Depth 6 | Set-Content -Path $ManifestPath -Encoding UTF8
 }
 
 function New-SingleFileFrontendPackage {
@@ -203,6 +284,11 @@ if (-not (Test-Path $builtExe)) {
     throw "Executable not found: $builtExe"
 }
 
+$builtUpdaterExe = Join-Path $buildDir 'src\updater\ManageSoftUpdater.exe'
+if (-not (Test-Path $builtUpdaterExe)) {
+    throw "Updater executable not found: $builtUpdaterExe"
+}
+
 $builtServerExe = Join-Path $buildDir 'src\server\ManageSoftServer.exe'
 if (-not (Test-Path $builtServerExe)) {
     throw "Backend executable not found: $builtServerExe"
@@ -220,6 +306,8 @@ New-Item -ItemType Directory -Path $distServerDir | Out-Null
 
 $distExe = Join-Path $distDir 'ManageSoftCpp.exe'
 Copy-Item $builtExe $distExe -Force
+$distUpdaterExe = Join-Path $distDir 'ManageSoftUpdater.exe'
+Copy-Item $builtUpdaterExe $distUpdaterExe -Force
 
 $distServerExe = Join-Path $distServerDir 'ManageSoftServer.exe'
 Copy-Item $builtServerExe $distServerExe -Force
@@ -284,6 +372,38 @@ foreach ($pluginDirName in $pluginDirs) {
     }
 }
 
+$frontendUpdateZip = Join-Path $repoRoot 'dist\ManageSoftCpp-update.zip'
+if (Test-Path $frontendUpdateZip) {
+    Remove-Item $frontendUpdateZip -Force
+}
+Compress-Archive -Path (Join-Path $distDir '*') -DestinationPath $frontendUpdateZip -Force
+
+$effectiveReleaseVersion = if ([string]::IsNullOrWhiteSpace($ReleaseVersion)) {
+    Get-ClientVersionFromSource -SourcePath $versionSourcePath
+} else {
+    $ReleaseVersion.Trim()
+}
+$effectiveMinimumSupportedVersion = if ([string]::IsNullOrWhiteSpace($MinimumSupportedVersion)) {
+    $effectiveReleaseVersion
+} else {
+    $MinimumSupportedVersion.Trim()
+}
+$effectivePublishedAt = if ([string]::IsNullOrWhiteSpace($PublishedAt)) {
+    (Get-Date).ToString('yyyy-MM-dd')
+} else {
+    $PublishedAt.Trim()
+}
+$updateManifestPath = Join-Path $repoRoot 'dist\update_manifest.json'
+New-UpdateManifest -ManifestPath $updateManifestPath `
+    -PackagePath $frontendUpdateZip `
+    -Version $effectiveReleaseVersion `
+    -MinimumVersion $effectiveMinimumSupportedVersion `
+    -Title $ReleaseTitle `
+    -DescriptionLines $ReleaseNotes `
+    -PublishedDate $effectivePublishedAt
+Copy-Item $frontendUpdateZip (Join-Path $distServerDir 'ManageSoftCpp-update.zip') -Force
+Copy-Item $updateManifestPath (Join-Path $distServerDir 'update_manifest.json') -Force
+
 $singleFileExe = $null
 if ($SingleFile) {
     $singleFileExe = New-SingleFileFrontendPackage -BundleDir $distDir -OutputExePath (Join-Path $repoRoot 'dist\ManageSoftCpp-single.exe')
@@ -295,6 +415,8 @@ Write-Host "Build directory : $buildDir"
 Write-Host "Executable      : $builtExe"
 Write-Host "Runnable bundle : $distDir"
 Write-Host "Backend bundle  : $distServerDir"
+Write-Host "Update package  : $frontendUpdateZip"
+Write-Host "Update manifest : $updateManifestPath"
 if ($singleFileExe) {
     Write-Host "Single-file exe : $singleFileExe"
 }

@@ -2,6 +2,7 @@
 
 #include "aiapisettings.h"
 #include "appservice.h"
+#include "updateinfo.h"
 
 #include <QJsonObject>
 
@@ -59,6 +60,7 @@ public:
                                                         const QString &note = QString(),
                             QString *errorMessage = nullptr) const override;
     bool analyzeInventoryFulfillment(const QString &filePath,
+                                     int fulfillmentSetCount,
                                      QList<InventoryFulfillmentResult> *results,
                                      QString *errorMessage = nullptr) const override;
     bool enrichInventoryRecord(const QString &manufacturerPart,
@@ -66,7 +68,21 @@ public:
                                const QStringList &desiredFieldKeys,
                                InventoryEnrichmentResult *result,
                                QString *errorMessage = nullptr) const override;
+    bool importDemandList(const QString &name,
+                          const QString &filePath,
+                          QString *errorMessage = nullptr) const override;
+    bool exportDemandList(const QString &recordId,
+                          const QString &filePath,
+                          QString *errorMessage = nullptr) const override;
+    bool loadDemandListItems(const QString &recordId,
+                             QList<DemandListItem> *items,
+                             QString *errorMessage = nullptr) const override;
+    bool analyzeDemandListFulfillment(const QString &recordId,
+                                      int buildCount,
+                                      QList<InventoryFulfillmentResult> *results,
+                                      QString *errorMessage = nullptr) const override;
     bool exportInventoryFulfillment(const QList<InventoryFulfillmentResult> &results,
+                                    const QString &sourceFilePath,
                                     const QString &filePath,
                                     QString *errorMessage = nullptr) const override;
     bool applyInventoryFulfillment(const QList<InventoryFulfillmentResult> &results,
@@ -76,9 +92,16 @@ public:
                                       QString *errorMessage = nullptr) const override;
 
     bool ping(QString *errorMessage = nullptr) const;
-    bool testAiConnection(const AiApiSettings &settings,
-                          QString *responsePreview = nullptr,
+    bool testAiConnection(QString *responsePreview = nullptr,
                           QString *errorMessage = nullptr) const;
+    bool checkForClientUpdate(const QString &currentVersion,
+                              ClientUpdateInfo *info,
+                              QString *errorMessage = nullptr) const;
+    bool downloadClientUpdatePackage(const QString &version,
+                                     QString *fileName,
+                                     QByteArray *content,
+                                     QString *sha256,
+                                     QString *errorMessage = nullptr) const;
 
 private:
     bool sendRequest(const QString &action,
@@ -90,6 +113,7 @@ private:
     bool writeFileBytes(const QString &filePath, const QByteArray &content, QString *errorMessage) const;
     bool responseSucceeded(const QJsonObject &response, QString *message) const;
     int aiRequestTimeoutMs(int suggestedTimeoutMs = -1) const;
+    int fulfillmentRequestTimeoutMs(int suggestedTimeoutMs = -1) const;
 
     QString m_host;
     quint16 m_port = 0;

@@ -11,11 +11,14 @@ INCLUDEPATH += src/client
 INCLUDEPATH += src/shared
 
 SOURCES += \
+    src/shared/aiapisettings.cpp \
     src/shared/aiinventoryenricher.cpp \
     src/client/main.cpp \
     src/client/accountsecuritydialog.cpp \
     src/client/connectionsettings.cpp \
     src/client/connectionsettingsdialog.cpp \
+    src/client/demandlibraryoverviewpage.cpp \
+    src/client/demandlibrarydetailpage.cpp \
     src/shared/datainitializer.cpp \
     src/shared/emailsettings.cpp \
     src/client/inventoryhistorydialog.cpp \
@@ -25,6 +28,7 @@ SOURCES += \
     src/shared/jsonstorageservice.cpp \
     src/client/inventoryrecorddialog.cpp \
     src/client/manualstockindialog.cpp \
+    src/client/scanstockindialog.cpp \
     src/client/logindialog.cpp \
     src/shared/smtpemailclient.cpp \
     src/shared/simplexlsxdocument.cpp \
@@ -35,12 +39,15 @@ SOURCES += \
     src/shared/tcpmessagecodec.cpp
 
 HEADERS += \
+    src/shared/aiapisettings.h \
     src/shared/aiinventoryenricher.h \
     src/shared/appservice.h \
     src/shared/appschema.h \
     src/client/accountsecuritydialog.h \
     src/client/connectionsettings.h \
     src/client/connectionsettingsdialog.h \
+    src/client/demandlibraryoverviewpage.h \
+    src/client/demandlibrarydetailpage.h \
     src/shared/datainitializer.h \
     src/shared/emailsettings.h \
     src/client/inventoryhistorydialog.h \
@@ -50,6 +57,7 @@ HEADERS += \
     src/shared/jsonstorageservice.h \
     src/client/inventoryrecorddialog.h \
     src/client/manualstockindialog.h \
+    src/client/scanstockindialog.h \
     src/client/logindialog.h \
     src/shared/smtpemailclient.h \
     src/shared/simplexlsxdocument.h \
