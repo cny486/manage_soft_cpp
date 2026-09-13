@@ -1,0 +1,35 @@
+# CMake, qmake, and local build trees
+build*/
+debug/
+release/
+dist/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*_autogen/
+.qmake.stash
+/Makefile
+/Makefile.Debug
+/Makefile.Release
+/object_script.ManageSoftCpp.*
+
+# Packaged application and compiled files
+/manage_soft_cpp-barcode/ManageSoftCpp/
+/manage_soft_cpp_linux_src.tar.gz
+*.exe
+*.dll
+*.o
+*.obj
+*.a
+*.lib
+*.pdb
+*.ilk
+*.tlog
+
+# Local tooling and generated caches
+.venv/
+node_modules/
+__pycache__/
+*.py[cod]
+*.log
